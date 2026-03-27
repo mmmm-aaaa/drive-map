@@ -1,7 +1,9 @@
 import { PLACE_RESULT_LIMIT } from "@drive-map/shared";
 import type { LatLng } from "@drive-map/shared";
+import { RequestAbortedError } from "../lib/abort";
 import { fetchWithTimeout } from "../lib/fetch-with-timeout";
 import { UpstreamServiceError } from "../lib/upstream-error";
+import { estimatePlaceBiasRadiusMeters } from "../domain/drive-estimate";
 
 const GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 
@@ -26,13 +28,7 @@ type GooglePlacesResponse = {
   }>;
 };
 
-function estimateBiasRadiusMeters(durationMinutes: number, tollRoadsAllowed: boolean): number {
-  const averageKmh = tollRoadsAllowed ? 80 : 40;
-  const estimatedMeters = (averageKmh * 1_000 * durationMinutes) / 60;
-  return Math.round(Math.max(5_000, Math.min(300_000, estimatedMeters * 1.2)));
-}
-
-export async function searchPlacesByText(env: Env, params: SearchPlaceParams): Promise<ResolvedPlace[]> {
+export async function searchPlacesByText(env: Env, params: SearchPlaceParams, signal?: AbortSignal): Promise<ResolvedPlace[]> {
   const response = await fetchWithTimeout(
     GOOGLE_PLACES_TEXT_SEARCH_URL,
     {
@@ -51,7 +47,7 @@ export async function searchPlacesByText(env: Env, params: SearchPlaceParams): P
               latitude: params.origin.lat,
               longitude: params.origin.lng
             },
-            radius: estimateBiasRadiusMeters(params.durationMinutes, params.tollRoadsAllowed)
+            radius: estimatePlaceBiasRadiusMeters(params.durationMinutes, params.tollRoadsAllowed)
           }
         }
       })
@@ -59,9 +55,14 @@ export async function searchPlacesByText(env: Env, params: SearchPlaceParams): P
     {
       timeoutMs: 1_500,
       retries: 1,
-      retryDelayMs: 250
+      retryDelayMs: 250,
+      ...(signal ? { signal } : {})
     }
   ).catch((error) => {
+    if (error instanceof RequestAbortedError) {
+      throw error;
+    }
+
     throw new UpstreamServiceError("google_places", error instanceof Error ? error.message : "Google Places API request failed");
   });
 

@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     working_dir: /workspace
-    command: sh -lc "mkdir -p frontend/dist && npm run dev -w backend -- --ip 0.0.0.0 --port 8787 --var APP_ORIGIN:http://localhost:5173"
+    command: sh -lc "mkdir -p frontend/dist && npm run dev -w backend -- --ip 0.0.0.0 --port 8787 --var APP_ORIGIN:http://localhost:5173 --var ALLOW_UNPROTECTED_START:true"
     ports:
       - "8787:8787"
     environment:

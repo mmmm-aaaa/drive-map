@@ -1,5 +1,6 @@
 import type { LatLng, NavigationRoute } from "@drive-map/shared";
 import { LLM_CANDIDATE_LIMIT, LLM_RETRY_LIMIT } from "@drive-map/shared";
+import { RequestAbortedError } from "../lib/abort";
 import { UpstreamServiceError } from "../lib/upstream-error";
 import { resolvePlace } from "./resolve-place";
 import { validateRouteDuration } from "./validate-route-duration";
@@ -36,7 +37,7 @@ function buildNoMatchMessage(): SelectDestinationNoMatch {
   };
 }
 
-export async function selectDestination(input: SelectDestinationInput, env: Env): Promise<SelectDestinationResult> {
+export async function selectDestination(input: SelectDestinationInput, env: Env, signal?: AbortSignal): Promise<SelectDestinationResult> {
   let feedback: string | undefined;
 
   for (let llmAttempt = 0; llmAttempt <= LLM_RETRY_LIMIT; llmAttempt += 1) {
@@ -46,7 +47,7 @@ export async function selectDestination(input: SelectDestinationInput, env: Env)
         durationMinutes: input.durationMinutes,
         tollRoadsAllowed: input.tollRoadsAllowed,
         ...(feedback ? { feedback } : {})
-      });
+      }, signal);
 
       if (llmResponse.result === "no_match") {
         return buildNoMatchMessage();
@@ -59,7 +60,8 @@ export async function selectDestination(input: SelectDestinationInput, env: Env)
           query: candidate.query,
           origin: input.origin,
           durationMinutes: input.durationMinutes,
-          tollRoadsAllowed: input.tollRoadsAllowed
+          tollRoadsAllowed: input.tollRoadsAllowed,
+          ...(signal ? { signal } : {})
         });
 
         if (!place) {
@@ -71,7 +73,7 @@ export async function selectDestination(input: SelectDestinationInput, env: Env)
           origin: input.origin,
           destinationPlaceId: place.id,
           tollRoadsAllowed: input.tollRoadsAllowed
-        });
+        }, signal);
 
         if (!route) {
           feedback = `候補「${candidate.query}」ではルート取得できませんでした。別候補を提案してください。`;
@@ -90,6 +92,10 @@ export async function selectDestination(input: SelectDestinationInput, env: Env)
         };
       }
     } catch (error) {
+      if (error instanceof RequestAbortedError) {
+        throw error;
+      }
+
       if (error instanceof UpstreamServiceError) {
         return {
           status: "upstream_error",

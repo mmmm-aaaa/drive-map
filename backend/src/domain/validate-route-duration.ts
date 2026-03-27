@@ -12,7 +12,7 @@ export function validateRouteDuration(routeDurationSeconds: number, requestedDur
 
   return {
     ok: diffMinutes <= DURATION_TOLERANCE_MINUTES,
-    diffMinutes: Math.round(diffMinutes),
+    diffMinutes: Math.ceil(diffMinutes),
     toleranceMinutes: DURATION_TOLERANCE_MINUTES
   };
 }

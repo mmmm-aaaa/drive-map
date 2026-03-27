@@ -1,4 +1,5 @@
 import type { LatLng } from "@drive-map/shared";
+import { estimateReachableDistanceKm } from "../domain/drive-estimate";
 
 type BuildPromptParams = {
   origin: LatLng;
@@ -6,11 +7,6 @@ type BuildPromptParams = {
   tollRoadsAllowed: boolean;
   feedback?: string;
 };
-
-function estimateReachableDistanceKm(durationMinutes: number, tollRoadsAllowed: boolean): number {
-  const averageKmh = tollRoadsAllowed ? 80 : 40;
-  return Math.max(10, Math.round((averageKmh * durationMinutes) / 60));
-}
 
 export function buildDestinationSelectionPrompt(params: BuildPromptParams): string {
   const distanceKm = estimateReachableDistanceKm(params.durationMinutes, params.tollRoadsAllowed);

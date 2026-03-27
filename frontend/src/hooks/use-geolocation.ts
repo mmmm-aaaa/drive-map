@@ -1,15 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CurrentPosition } from "@drive-map/shared";
 import { GEOLOCATION_OPTIONS } from "@drive-map/shared";
+import {
+  createUnsupportedGeolocationFailure,
+  mapGeolocationFailure,
+  type GeolocationFailure,
+  type GeolocationFailureStatus
+} from "../lib/geolocation-error";
 
-export type GeolocationStatus = "idle" | "requesting" | "ready" | "permission_denied" | "timeout" | "unavailable" | "error";
+export type GeolocationStatus = "idle" | "requesting" | "ready" | GeolocationFailureStatus;
+
+export type GeolocationRequestResult =
+  | {
+      ok: true;
+      position: CurrentPosition;
+    }
+  | {
+      ok: false;
+      failure: GeolocationFailure;
+    };
 
 type UseGeolocationResult = {
   status: GeolocationStatus;
   position: CurrentPosition | null;
   errorMessage: string | null;
-  requestCurrentPosition: () => Promise<CurrentPosition | null>;
-  startWatching: (onPosition: (position: CurrentPosition) => void) => void;
+  requestCurrentPosition: () => Promise<GeolocationRequestResult>;
+  startWatching: (onPosition: (position: CurrentPosition) => void, onError?: (failure: GeolocationFailure) => void) => void;
   stopWatching: () => void;
 };
 
@@ -22,19 +38,6 @@ function toCurrentPosition(position: GeolocationPosition): CurrentPosition {
     speed: Number.isFinite(position.coords.speed) ? position.coords.speed : null,
     timestamp: position.timestamp
   };
-}
-
-function mapErrorMessage(error: GeolocationPositionError): string {
-  if (error.code === error.PERMISSION_DENIED) {
-    return "位置情報の利用が拒否されました。ブラウザ設定から許可してください。";
-  }
-  if (error.code === error.TIMEOUT) {
-    return "位置情報の取得がタイムアウトしました。通信状況を確認して再試行してください。";
-  }
-  if (error.code === error.POSITION_UNAVAILABLE) {
-    return "現在地を取得できませんでした。屋外で再試行してください。";
-  }
-  return "位置情報の取得に失敗しました。";
 }
 
 export function useGeolocation(): UseGeolocationResult {
@@ -51,11 +54,18 @@ export function useGeolocation(): UseGeolocationResult {
     }
   }, []);
 
-  const requestCurrentPosition = useCallback(async (): Promise<CurrentPosition | null> => {
+  const applyFailure = useCallback((failure: GeolocationFailure): GeolocationRequestResult => {
+    setStatus(failure.status);
+    setErrorMessage(failure.errorMessage);
+    return {
+      ok: false,
+      failure
+    };
+  }, []);
+
+  const requestCurrentPosition = useCallback(async (): Promise<GeolocationRequestResult> => {
     if (!("geolocation" in navigator)) {
-      setStatus("unavailable");
-      setErrorMessage("このブラウザでは位置情報に対応していません。");
-      return null;
+      return applyFailure(createUnsupportedGeolocationFailure());
     }
 
     setStatus("requesting");
@@ -67,24 +77,26 @@ export function useGeolocation(): UseGeolocationResult {
           const current = toCurrentPosition(geoPosition);
           setPosition(current);
           setStatus("ready");
-          resolve(current);
+          setErrorMessage(null);
+          resolve({
+            ok: true,
+            position: current
+          });
         },
         (error) => {
-          const message = mapErrorMessage(error);
-          setErrorMessage(message);
-          setStatus(error.code === error.PERMISSION_DENIED ? "permission_denied" : error.code === error.TIMEOUT ? "timeout" : "error");
-          resolve(null);
+          resolve(applyFailure(mapGeolocationFailure(error)));
         },
         GEOLOCATION_OPTIONS
       );
     });
-  }, []);
+  }, [applyFailure]);
 
   const startWatching = useCallback(
-    (onPosition: (current: CurrentPosition) => void) => {
+    (onPosition: (current: CurrentPosition) => void, onError?: (failure: GeolocationFailure) => void) => {
       if (!("geolocation" in navigator)) {
-        setStatus("unavailable");
-        setErrorMessage("このブラウザでは位置情報に対応していません。");
+        const failure = createUnsupportedGeolocationFailure();
+        applyFailure(failure);
+        onError?.(failure);
         return;
       }
 
@@ -95,16 +107,18 @@ export function useGeolocation(): UseGeolocationResult {
           const current = toCurrentPosition(geoPosition);
           setPosition(current);
           setStatus("ready");
+          setErrorMessage(null);
           onPosition(current);
         },
         (error) => {
-          setErrorMessage(mapErrorMessage(error));
-          setStatus(error.code === error.PERMISSION_DENIED ? "permission_denied" : error.code === error.TIMEOUT ? "timeout" : "error");
+          const failure = mapGeolocationFailure(error);
+          applyFailure(failure);
+          onError?.(failure);
         },
         GEOLOCATION_OPTIONS
       );
     },
-    [stopWatching]
+    [applyFailure, stopWatching]
   );
 
   useEffect(() => stopWatching, [stopWatching]);

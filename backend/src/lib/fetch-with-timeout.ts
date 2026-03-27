@@ -1,3 +1,5 @@
+import { RequestAbortedError, toRequestAbortedError } from "./abort";
+
 export class FetchTimeoutError extends Error {
   constructor(message = "Request timed out") {
     super(message);
@@ -11,6 +13,7 @@ type FetchWithTimeoutOptions = {
   retryDelayMs: number;
   shouldRetryStatus?: (status: number) => boolean;
   fetchFn?: typeof fetch;
+  signal?: AbortSignal;
 };
 
 const DEFAULT_SHOULD_RETRY_STATUS = (status: number): boolean => status === 429 || status >= 500;
@@ -22,6 +25,10 @@ function wait(ms: number): Promise<void> {
 }
 
 function shouldRetryError(error: unknown): boolean {
+  if (error instanceof RequestAbortedError) {
+    return false;
+  }
+
   if (error instanceof FetchTimeoutError) {
     return true;
   }
@@ -34,13 +41,21 @@ function shouldRetryError(error: unknown): boolean {
 }
 
 export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit | undefined, options: FetchWithTimeoutOptions): Promise<Response> {
-  const { timeoutMs, retries, retryDelayMs, fetchFn = fetch, shouldRetryStatus = DEFAULT_SHOULD_RETRY_STATUS } = options;
+  const { timeoutMs, retries, retryDelayMs, fetchFn = fetch, shouldRetryStatus = DEFAULT_SHOULD_RETRY_STATUS, signal } = options;
 
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (signal?.aborted) {
+      throw toRequestAbortedError(signal.reason);
+    }
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = (): void => {
+      controller.abort(signal?.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timeoutId = setTimeout(() => controller.abort(new FetchTimeoutError()), timeoutMs);
 
     try {
       const response = await fetchFn(input, {
@@ -61,9 +76,11 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
 
       return response;
     } catch (error) {
-      clearTimeout(timeoutId);
-
-      if (controller.signal.aborted) {
+      if (signal?.aborted) {
+        lastError = toRequestAbortedError(signal.reason);
+      } else if (controller.signal.aborted && controller.signal.reason instanceof FetchTimeoutError) {
+        lastError = controller.signal.reason;
+      } else if (controller.signal.aborted) {
         lastError = new FetchTimeoutError();
       } else {
         lastError = error;
@@ -75,6 +92,9 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
       }
 
       throw lastError;
+    } finally {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
     }
   }
 

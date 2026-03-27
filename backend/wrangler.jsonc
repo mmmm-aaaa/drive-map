@@ -6,7 +6,8 @@
     "directory": "../frontend/dist"
   },
   "vars": {
-    "APP_ORIGIN": ""
+    "APP_ORIGIN": "",
+    "ALLOW_UNPROTECTED_START": "false"
   },
   "observability": {
     "enabled": true

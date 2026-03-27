@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CurrentPosition, RouteStep } from "@drive-map/shared";
 import {
+  ARRIVAL_INSTRUCTION,
   ARRIVAL_DISTANCE_METERS,
+  DEFAULT_STEP_INSTRUCTION,
   MAX_DURATION_MINUTES,
-  MIN_DURATION_MINUTES
+  MIN_DURATION_MINUTES,
+  OFF_ROUTE_INSTRUCTION
 } from "@drive-map/shared";
 import { distanceBetweenMeters, minDistanceToPolylineMeters } from "../lib/distance";
 import { angularDifferenceDegrees, bearingDegrees } from "../lib/heading";
@@ -12,7 +15,7 @@ import { toDistanceBucket } from "../lib/navigation-threshold";
 import { nextOffRouteConsecutiveCount, onRouteThresholdMeters } from "../lib/off-route";
 import { decodePolyline } from "../lib/polyline";
 import { startNavigation } from "../services/api-client";
-import { createInitialNavigationStore, type NavigationStore } from "../state/navigation-store";
+import { createInitialNavigationStore, createNavigationSessionState, type NavigationStore } from "../state/navigation-store";
 import { useGeolocation } from "./use-geolocation";
 import { useSpeech } from "./use-speech";
 import { useWakeLock } from "./use-wake-lock";
@@ -119,7 +122,7 @@ export function useNavigationMachine(): NavigationMachineResult {
           ...current,
           machineState: "arrived",
           position,
-          currentInstruction: "目的地付近に到着しました。安全な場所に停車してください。",
+          currentInstruction: ARRIVAL_INSTRUCTION,
           remainingStepDistanceMeters: finalDistance,
           currentBucket: "soon",
           offRouteConsecutiveCount: 0,
@@ -141,7 +144,7 @@ export function useNavigationMachine(): NavigationMachineResult {
           patchStore((current) => ({
             ...current,
             position,
-            currentInstruction: "元のルートに戻ってください。",
+            currentInstruction: OFF_ROUTE_INSTRUCTION,
             remainingStepDistanceMeters: routeDistance
           }));
         }
@@ -155,11 +158,11 @@ export function useNavigationMachine(): NavigationMachineResult {
           machineState: "off_route",
           position,
           offRouteConsecutiveCount: offRouteCount,
-          currentInstruction: "元のルートに戻ってください。",
+          currentInstruction: OFF_ROUTE_INSTRUCTION,
           remainingStepDistanceMeters: routeDistance,
           currentBucket: null
         }));
-        speech.speak("元のルートに戻ってください。", "off_route");
+        speech.speak(OFF_ROUTE_INSTRUCTION, "off_route");
         return;
       }
 
@@ -231,14 +234,24 @@ export function useNavigationMachine(): NavigationMachineResult {
       return;
     }
 
-    startWatching((position) => {
-      evaluatePosition(position);
-    });
+    startWatching(
+      (position) => {
+        evaluatePosition(position);
+      },
+      (failure) => {
+        patchStore((current) => ({
+          ...current,
+          machineState: "error",
+          errorMessage: failure.errorMessage
+        }));
+        void wakeLock.releaseWakeLock();
+      }
+    );
 
     return () => {
       stopWatching();
     };
-  }, [evaluatePosition, startWatching, stopWatching, store.machineState]);
+  }, [evaluatePosition, patchStore, startWatching, stopWatching, store.machineState, wakeLock]);
 
   const requestPermission = useCallback(async () => {
     patchStore((current) => ({
@@ -247,12 +260,12 @@ export function useNavigationMachine(): NavigationMachineResult {
       errorMessage: null
     }));
 
-    const currentPosition = await requestCurrentPosition();
-    if (currentPosition) {
+    const result = await requestCurrentPosition();
+    if (result.ok) {
       patchStore((current) => ({
         ...current,
         machineState: "ready_to_start",
-        position: currentPosition,
+        position: result.position,
         errorMessage: null
       }));
       return;
@@ -261,9 +274,9 @@ export function useNavigationMachine(): NavigationMachineResult {
     patchStore((current) => ({
       ...current,
       machineState: "error",
-      errorMessage: geolocationError ?? "現在地の取得に失敗しました。"
+      errorMessage: result.failure.errorMessage
     }));
-  }, [geolocationError, patchStore, requestCurrentPosition]);
+  }, [patchStore, requestCurrentPosition]);
 
   const startNavigationSession = useCallback(async () => {
     const current = storeRef.current;
@@ -316,7 +329,7 @@ export function useNavigationMachine(): NavigationMachineResult {
 
       const route = response.route;
       const initialStep = route.steps[0];
-      const initialInstruction = response.ui.initialInstruction || initialStep?.instruction || "そのまま進んでください。";
+      const initialInstruction = response.ui.initialInstruction || initialStep?.instruction || DEFAULT_STEP_INSTRUCTION;
       const initialRemainingDistance = initialStep ? distanceBetweenMeters(currentPosition, initialStep.endLocation) : 0;
       const initialBucket = initialStep ? toDistanceBucket(initialRemainingDistance) : null;
 
@@ -355,13 +368,9 @@ export function useNavigationMachine(): NavigationMachineResult {
     patchStore((current) => ({
       ...current,
       machineState: "ready_to_start",
-      route: null,
-      currentStepIndex: 0,
-      currentInstruction: "ナビを終了しました。",
-      remainingStepDistanceMeters: 0,
-      currentBucket: null,
-      offRouteConsecutiveCount: 0,
-      stepSwitchConsecutiveCount: 0
+      ...createNavigationSessionState({
+        currentInstruction: "ナビを終了しました。"
+      })
     }));
   }, [patchStore, speech, stopWatching, wakeLock]);
 
@@ -369,7 +378,10 @@ export function useNavigationMachine(): NavigationMachineResult {
     patchStore((current) => ({
       ...current,
       machineState: current.position ? "ready_to_start" : "idle",
-      errorMessage: null
+      errorMessage: null,
+      ...createNavigationSessionState({
+        currentInstruction: current.position ? "出発条件を入力してください。" : "現在地を取得してください。"
+      })
     }));
   }, [patchStore]);
 

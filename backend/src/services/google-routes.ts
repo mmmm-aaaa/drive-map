@@ -1,4 +1,6 @@
+import { DEFAULT_STEP_INSTRUCTION } from "@drive-map/shared";
 import type { LatLng, NavigationRoute, RouteStep } from "@drive-map/shared";
+import { RequestAbortedError } from "../lib/abort";
 import { fetchWithTimeout } from "../lib/fetch-with-timeout";
 import { UpstreamServiceError } from "../lib/upstream-error";
 
@@ -69,7 +71,7 @@ function parseLatLng(value: GoogleLatLng | undefined): LatLng | null {
   };
 }
 
-export async function computeRoute(env: Env, params: ComputeRouteParams): Promise<NavigationRoute | null> {
+export async function computeRoute(env: Env, params: ComputeRouteParams, signal?: AbortSignal): Promise<NavigationRoute | null> {
   const response = await fetchWithTimeout(
     GOOGLE_ROUTES_URL,
     {
@@ -105,9 +107,14 @@ export async function computeRoute(env: Env, params: ComputeRouteParams): Promis
     {
       timeoutMs: 2_000,
       retries: 0,
-      retryDelayMs: 0
+      retryDelayMs: 0,
+      ...(signal ? { signal } : {})
     }
   ).catch((error) => {
+    if (error instanceof RequestAbortedError) {
+      throw error;
+    }
+
     throw new UpstreamServiceError("google_routes", error instanceof Error ? error.message : "Google Routes API request failed");
   });
 
@@ -139,7 +146,7 @@ export async function computeRoute(env: Env, params: ComputeRouteParams): Promis
       index,
       distanceMeters: Math.max(0, Math.round(step.distanceMeters ?? 0)),
       durationSeconds: parseDurationSeconds(step.staticDuration),
-      instruction: step.navigationInstruction?.instructions?.trim() || "そのまま進んでください",
+      instruction: step.navigationInstruction?.instructions?.trim() || DEFAULT_STEP_INSTRUCTION,
       maneuver: step.maneuver ?? null,
       polyline: step.polyline?.encodedPolyline ?? "",
       startLocation,

@@ -1,4 +1,5 @@
 import { LLM_RETRY_LIMIT } from "@drive-map/shared";
+import { RequestAbortedError } from "../lib/abort";
 import { fetchWithTimeout } from "../lib/fetch-with-timeout";
 import { UpstreamServiceError } from "../lib/upstream-error";
 import { buildDestinationSelectionPrompt } from "../prompts/destination-selection";
@@ -38,7 +39,7 @@ function extractContent(payload: SakuraChatResponse): string {
   throw new Error("Sakura response does not contain message content");
 }
 
-export async function selectDestinationByLlm(env: Env, input: SelectDestinationInput): Promise<LlmResponse> {
+export async function selectDestinationByLlm(env: Env, input: SelectDestinationInput, signal?: AbortSignal): Promise<LlmResponse> {
   const prompt = buildDestinationSelectionPrompt(input);
 
   const response = await fetchWithTimeout(
@@ -70,9 +71,14 @@ export async function selectDestinationByLlm(env: Env, input: SelectDestinationI
     {
       timeoutMs: 3_000,
       retries: Math.min(1, LLM_RETRY_LIMIT),
-      retryDelayMs: 250
+      retryDelayMs: 250,
+      ...(signal ? { signal } : {})
     }
   ).catch((error) => {
+    if (error instanceof RequestAbortedError) {
+      throw error;
+    }
+
     throw new UpstreamServiceError("sakura_chat", error instanceof Error ? error.message : "Sakura API request failed");
   });
 

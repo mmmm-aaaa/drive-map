@@ -9,6 +9,8 @@
 3. フロント: `http://localhost:5173`
 4. Worker: `http://localhost:8787`
 
+`docker-compose` の Worker はローカル開発に限り `ALLOW_UNPROTECTED_START=true` で起動します。本番では必ず `APP_ORIGIN` と `START_RATE_LIMIT` を設定し、このフラグを `false` のままにしてください。
+
 停止:
 
 - `npm run docker:down`

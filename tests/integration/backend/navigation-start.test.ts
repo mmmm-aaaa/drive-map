@@ -1,3 +1,4 @@
+import { START_HARD_TIMEOUT_MS } from "@drive-map/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../../../backend/src/app";
 
@@ -19,6 +20,10 @@ function createEnv(overrides?: Record<string, unknown>): Record<string, unknown>
     SAKURA_AI_MODEL: "test-model",
     GOOGLE_MAPS_API_KEY: "test-google-key",
     APP_ORIGIN: "http://localhost:5173",
+    ALLOW_UNPROTECTED_START: "false",
+    START_RATE_LIMIT: {
+      limit: async () => ({ success: true })
+    },
     ...overrides
   };
 }
@@ -26,6 +31,7 @@ function createEnv(overrides?: Record<string, unknown>): Record<string, unknown>
 describe("POST /api/navigation/start", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
@@ -161,6 +167,163 @@ describe("POST /api/navigation/start", () => {
 
     expect(response.status).toBe(400);
     expect(payload.status).toBe("validation_failed");
+  });
+
+  it("rejects requests without origin header", async () => {
+    const request = new Request("http://localhost/api/navigation/start", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        origin: { lat: 35.0, lng: 139.0 },
+        durationMinutes: 90,
+        tollRoadsAllowed: true
+      })
+    });
+
+    const response = await app.fetch(request, createEnv() as never);
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(403);
+    expect(payload.status).toBe("validation_failed");
+  });
+
+  it("fails closed when the start rate limit binding is missing", async () => {
+    const request = new Request("http://localhost/api/navigation/start", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:5173"
+      },
+      body: JSON.stringify({
+        origin: { lat: 35.0, lng: 139.0 },
+        durationMinutes: 90,
+        tollRoadsAllowed: true
+      })
+    });
+
+    const response = await app.fetch(
+      request,
+      createEnv({
+        START_RATE_LIMIT: undefined
+      }) as never
+    );
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(503);
+    expect(payload.status).toBe("upstream_error");
+  });
+
+  it("aborts upstream work when the start request times out", async () => {
+    vi.useFakeTimers();
+
+    let aborted = false;
+    const delayedJsonResponse = (body: unknown, delayMs: number): Promise<Response> =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(jsonResponse(body));
+        }, delayMs);
+      });
+
+    const mismatchRoute = {
+      routes: [
+        {
+          distanceMeters: 20_000,
+          duration: "1800s",
+          polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
+          legs: [
+            {
+              steps: [
+                {
+                  distanceMeters: 1000,
+                  staticDuration: "600s",
+                  maneuver: "TURN_RIGHT",
+                  navigationInstruction: { instructions: "右方向です" },
+                  polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
+                  startLocation: { latLng: { latitude: 35.0, longitude: 139.0 } },
+                  endLocation: { latLng: { latitude: 35.01, longitude: 139.01 } }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  result: "ok",
+                  candidates: [{ query: "箱根" }, { query: "熱海" }, { query: "鎌倉" }]
+                })
+              }
+            }
+          ]
+        })
+      )
+      .mockImplementationOnce(() =>
+        delayedJsonResponse(
+          {
+            places: [{ id: "place-1", displayName: { text: "箱根" }, formattedAddress: "神奈川県足柄下郡箱根町" }]
+          },
+          1_400
+        )
+      )
+      .mockImplementationOnce(() => delayedJsonResponse(mismatchRoute, 1_900))
+      .mockImplementationOnce(() =>
+        delayedJsonResponse(
+          {
+            places: [{ id: "place-2", displayName: { text: "熱海" }, formattedAddress: "静岡県熱海市" }]
+          },
+          1_400
+        )
+      )
+      .mockImplementationOnce(() => delayedJsonResponse(mismatchRoute, 1_900))
+      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+        const signal = init?.signal;
+
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+            },
+            { once: true }
+          );
+        });
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/navigation/start", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:5173"
+      },
+      body: JSON.stringify({
+        origin: { lat: 35.0, lng: 139.0 },
+        durationMinutes: 90,
+        tollRoadsAllowed: true
+      })
+    });
+
+    const responsePromise = app.fetch(request, createEnv() as never);
+    await vi.advanceTimersByTimeAsync(START_HARD_TIMEOUT_MS);
+
+    const response = await responsePromise;
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(504);
+    expect(payload.status).toBe("upstream_error");
+    expect(aborted).toBe(true);
   });
 });
 

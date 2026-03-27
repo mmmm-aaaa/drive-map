@@ -12,6 +12,9 @@ export const START_RATE_LIMIT_PERIOD_SECONDS = 10;
 export const START_RATE_LIMIT_MAX_REQUESTS = 1;
 
 export const NAVIGATION_DISTANCE_THRESHOLDS_METERS = [800, 600, 400, 200, 100, 50] as const;
+export const DEFAULT_STEP_INSTRUCTION = "そのまま進んでください。";
+export const OFF_ROUTE_INSTRUCTION = "元のルートに戻ってください。";
+export const ARRIVAL_INSTRUCTION = "目的地付近に到着しました。安全な場所に停車してください。";
 export const ARRIVAL_DISTANCE_METERS = 50;
 export const OFF_ROUTE_BASE_DISTANCE_METERS = 60;
 export const OFF_ROUTE_ACCURACY_MULTIPLIER = 1.5;

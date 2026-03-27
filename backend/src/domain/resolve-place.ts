@@ -6,6 +6,7 @@ type ResolvePlaceInput = {
   origin: LatLng;
   durationMinutes: number;
   tollRoadsAllowed: boolean;
+  signal?: AbortSignal;
 };
 
 export async function resolvePlace(env: Env, input: ResolvePlaceInput): Promise<ResolvedPlace | null> {
@@ -14,7 +15,7 @@ export async function resolvePlace(env: Env, input: ResolvePlaceInput): Promise<
     origin: input.origin,
     durationMinutes: input.durationMinutes,
     tollRoadsAllowed: input.tollRoadsAllowed
-  });
+  }, input.signal);
 
   return places[0] ?? null;
 }

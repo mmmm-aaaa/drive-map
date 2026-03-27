@@ -13,17 +13,29 @@ export type NavigationStore = {
   errorMessage: string | null;
 };
 
-export function createInitialNavigationStore(): NavigationStore {
+type NavigationSessionState = Pick<
+  NavigationStore,
+  "route" | "currentStepIndex" | "currentInstruction" | "remainingStepDistanceMeters" | "currentBucket" | "offRouteConsecutiveCount" | "stepSwitchConsecutiveCount"
+>;
+
+export function createNavigationSessionState(overrides: Partial<NavigationSessionState> = {}): NavigationSessionState {
   return {
-    machineState: "idle",
     route: null,
-    position: null,
     currentStepIndex: 0,
     currentInstruction: "現在地を取得してください。",
     remainingStepDistanceMeters: 0,
     currentBucket: null,
     offRouteConsecutiveCount: 0,
     stepSwitchConsecutiveCount: 0,
-    errorMessage: null
+    ...overrides
+  };
+}
+
+export function createInitialNavigationStore(): NavigationStore {
+  return {
+    machineState: "idle",
+    position: null,
+    errorMessage: null,
+    ...createNavigationSessionState()
   };
 }

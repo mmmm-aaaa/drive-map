@@ -1,10 +1,7 @@
 import type { LatLng } from "@drive-map/shared";
+import { toRadians } from "./geo-math";
 
 const EARTH_RADIUS_METERS = 6_371_000;
-
-function toRadians(value: number): number {
-  return (value * Math.PI) / 180;
-}
 
 export function distanceBetweenMeters(a: LatLng, b: LatLng): number {
   const dLat = toRadians(b.lat - a.lat);

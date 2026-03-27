@@ -1,12 +1,5 @@
 import type { LatLng } from "@drive-map/shared";
-
-function toRadians(value: number): number {
-  return (value * Math.PI) / 180;
-}
-
-function toDegrees(value: number): number {
-  return (value * 180) / Math.PI;
-}
+import { toDegrees, toRadians } from "./geo-math";
 
 export function bearingDegrees(start: LatLng, end: LatLng): number {
   const lat1 = toRadians(start.lat);
