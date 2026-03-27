@@ -1,0 +1,40 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace
+    command: npm run dev -w frontend -- --host 0.0.0.0 --port 5173
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/workspace/frontend
+      - ./shared:/workspace/shared
+      - ./package.json:/workspace/package.json:ro
+      - ./tsconfig.base.json:/workspace/tsconfig.base.json:ro
+      - ./backend:/workspace/backend:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace
+    command: sh -lc "mkdir -p frontend/dist && npm run dev -w backend -- --ip 0.0.0.0 --port 8787 --var APP_ORIGIN:http://localhost:5173"
+    ports:
+      - "8787:8787"
+    environment:
+      SAKURA_AI_API_KEY: ${SAKURA_AI_API_KEY:-}
+      SAKURA_AI_MODEL: ${SAKURA_AI_MODEL:-}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      WRANGLER_SEND_METRICS: "false"
+    volumes:
+      - ./backend:/workspace/backend
+      - ./shared:/workspace/shared
+      - ./frontend:/workspace/frontend
+      - ./tests:/workspace/tests
+      - ./package.json:/workspace/package.json:ro
+      - ./tsconfig.base.json:/workspace/tsconfig.base.json:ro
+      - ./vitest.config.ts:/workspace/vitest.config.ts:ro

@@ -1,0 +1,14 @@
+{
+  "name": "drive-map",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-27",
+  "assets": {
+    "directory": "../frontend/dist"
+  },
+  "vars": {
+    "APP_ORIGIN": ""
+  },
+  "observability": {
+    "enabled": true
+  }
+}

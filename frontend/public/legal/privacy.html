@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>プライバシーポリシー | Drive Map</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f6f8fb;
+        color: #1f2937;
+      }
+      main {
+        width: min(900px, 100%);
+        margin: 0 auto;
+        padding: 2rem 1rem 3rem;
+      }
+      h1,
+      h2 {
+        margin-top: 0;
+      }
+      section {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1rem;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+        margin-top: 1rem;
+      }
+      ul {
+        margin: 0.5rem 0 0;
+        padding-left: 1.2rem;
+      }
+      a {
+        color: #0f5cd8;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>プライバシーポリシー</h1>
+      <section>
+        <h2>1. 取得する情報</h2>
+        <ul>
+          <li>現在地情報（緯度経度、精度、進行方向、速度の可能性）</li>
+          <li>ユーザーが入力した希望時間と有料道路可否</li>
+          <li>ルート計算結果と案内表示に必要な一時状態</li>
+        </ul>
+      </section>
+      <section>
+        <h2>2. 利用目的</h2>
+        <ul>
+          <li>目的地候補の生成</li>
+          <li>希望時間との整合性チェック</li>
+          <li>画面・音声によるルート案内</li>
+        </ul>
+      </section>
+      <section>
+        <h2>3. 外部サービスへの送信</h2>
+        <ul>
+          <li>Google Maps Platform（Places / Routes）</li>
+          <li>さくらの AI Engine（目的地候補生成）</li>
+        </ul>
+      </section>
+      <section>
+        <h2>4. 保存期間</h2>
+        <p>
+          MVP では案内状態を主にブラウザのメモリ上で保持し、ページ再読み込み・タブ終了・案内終了時に失われます。サーバー側で案内再開のための恒久保存は行いません。
+        </p>
+      </section>
+      <section>
+        <h2>5. 安全管理</h2>
+        <ul>
+          <li>通信は HTTPS 前提</li>
+          <li>API キーはサーバー側で管理</li>
+          <li>CSP 等のセキュリティヘッダを適用</li>
+        </ul>
+      </section>
+      <p><a href="/">アプリに戻る</a></p>
+    </main>
+  </body>
+</html>

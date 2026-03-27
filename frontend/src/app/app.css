@@ -1,0 +1,173 @@
+:root {
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  line-height: 1.5;
+  color: #1f2937;
+  background: radial-gradient(circle at top, #f5fbff 0%, #edf3f9 45%, #e4ecf4 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.screen-stack {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.panel {
+  width: min(100%, 560px);
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+.legal-footer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  font-size: 0.86rem;
+  color: #4b5563;
+}
+
+.legal-footer a {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.legal-footer a:hover {
+  text-decoration: underline;
+}
+
+.legal-separator {
+  color: #9ca3af;
+}
+
+.navigation-panel {
+  text-align: center;
+}
+
+.panel-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+.panel-text {
+  margin: 0.5rem 0;
+}
+
+.panel-error {
+  color: #b42318;
+  margin: 0.75rem 0;
+}
+
+.button-primary,
+.button-secondary {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.button-primary {
+  background: #0f5cd8;
+  color: #ffffff;
+}
+
+.button-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-secondary {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.form-row {
+  margin: 1rem 0;
+}
+
+.inline-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inline-inputs input {
+  width: 5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.state-chip {
+  display: inline-block;
+  margin: 0;
+  border-radius: 9999px;
+  padding: 0.2rem 0.7rem;
+  background: #e4f0ff;
+  color: #1d4ed8;
+  font-size: 0.86rem;
+}
+
+.arrow {
+  font-size: 4rem;
+  line-height: 1;
+  margin: 0.6rem 0;
+}
+
+.instruction {
+  font-size: 1.2rem;
+  margin: 0.6rem 0;
+}
+
+.attribution {
+  font-size: 0.75rem;
+  color: #4b5563;
+  margin-top: 1rem;
+}
+
+.muted {
+  color: #4b5563;
+}
+
+@media (max-width: 640px) {
+  .panel {
+    border-radius: 14px;
+    padding: 1rem;
+  }
+}
