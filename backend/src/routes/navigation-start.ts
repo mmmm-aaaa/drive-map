@@ -2,6 +2,7 @@ import { START_HARD_TIMEOUT_MS } from "@drive-map/shared";
 import type { Context } from "hono";
 import type { Hono } from "hono";
 import type { StartNavigationResponse } from "@drive-map/shared";
+import type { AppBindings } from "../app";
 import { handleStartNavigation } from "../handlers/start-navigation";
 import { parseEnv } from "../env";
 import { RequestAbortedError, combineAbortSignals, isAbortError } from "../lib/abort";
@@ -39,8 +40,16 @@ function getClientAddress(c: Context): string {
 }
 
 function getConfiguredOrigin(env: Env): string | null {
-  const origin = env.APP_ORIGIN?.trim();
-  return origin ? origin : null;
+  const raw = env.APP_ORIGIN?.trim();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
 }
 
 type StartNavigationOutcome =
@@ -48,7 +57,7 @@ type StartNavigationOutcome =
   | { type: "error"; error: unknown }
   | { type: "timeout" };
 
-export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variables: { requestId: string } }>): void {
+export function registerNavigationStartRoute(app: Hono<AppBindings>): void {
   app.post("/api/navigation/start", async (c) => {
     const requestId = c.get("requestId");
     const contentType = c.req.header("content-type") ?? "";
@@ -57,17 +66,18 @@ export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variable
       return jsonResponse(c, 415, buildValidationError("application/json で送信してください。"));
     }
 
-    let env: Env;
-    try {
-      env = {
-        ...c.env,
-        ...parseEnv(c.env)
-      };
-    } catch {
+    const parsedEnv = (() => {
+      try {
+        return parseEnv(c.env);
+      } catch {
+        return null;
+      }
+    })();
+    if (!parsedEnv) {
       return jsonResponse(c, 503, buildUpstreamError("サーバー設定が未完了です。環境変数を確認してください。"));
     }
 
-    const appOrigin = getConfiguredOrigin(env);
+    const appOrigin = getConfiguredOrigin(parsedEnv);
     if (!appOrigin) {
       return jsonResponse(c, 503, buildUpstreamError("サーバー設定が未完了です。公開設定を確認してください。"));
     }
@@ -82,7 +92,7 @@ export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variable
     }
 
     const clientAddress = getClientAddress(c);
-    const rateLimitResult = await checkStartRateLimit(c.env, clientAddress, requestId);
+    const rateLimitResult = await checkStartRateLimit(parsedEnv, clientAddress, requestId);
     if (!rateLimitResult.ok) {
       if (rateLimitResult.reason === "rate_limited") {
         return jsonResponse(c, 429, buildUpstreamError("リクエストが集中しています。10秒ほど待ってから再試行してください。"));
@@ -106,7 +116,7 @@ export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variable
 
     const timeoutController = new AbortController();
     const { signal, cleanup } = combineAbortSignals([c.req.raw.signal, timeoutController.signal]);
-    const navigationPromise: Promise<StartNavigationOutcome> = handleStartNavigation(parsed.data, env, signal, requestId)
+    const navigationPromise: Promise<StartNavigationOutcome> = handleStartNavigation(parsed.data, parsedEnv, signal, requestId)
       .then((result): StartNavigationOutcome => ({
         type: "success",
         result

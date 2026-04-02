@@ -1,7 +1,7 @@
 import type { LatLng, NavigationRoute } from "@drive-map/shared";
 import { LLM_PER_CALL_TIMEOUT_MS, MIN_REMAINING_FOR_RETRY_MS, RETRY_SAFETY_MARGIN_MS } from "@drive-map/shared";
 import { RequestAbortedError } from "../lib/abort";
-import { logInfo } from "../lib/logger";
+import { logStage } from "../lib/logger";
 import { UpstreamServiceError } from "../lib/upstream-error";
 import { resolvePlace } from "./resolve-place";
 import { validateRouteDuration } from "./validate-route-duration";
@@ -9,6 +9,11 @@ import { computeRoute } from "../services/google-routes";
 import { selectDestinationByLlm } from "../services/llm-chat";
 
 const LLM_REASK_LIMIT = 2;
+const SAFE_QUERY_PATTERN = /[^\p{L}\p{N}\s\-・、。（）()「」]/gu;
+
+function sanitizeQuery(raw: string): string {
+  return raw.replace(SAFE_QUERY_PATTERN, "").trim();
+}
 
 type SelectDestinationInput = {
   origin: LatLng;
@@ -40,25 +45,18 @@ function buildNoMatchMessage(): SelectDestinationNoMatch {
   };
 }
 
-function logStage(requestId: string | undefined, event: string, details?: Record<string, unknown>): void {
-  if (!requestId) {
-    return;
-  }
-
-  logInfo({
-    requestId,
-    event,
-    ...(details ? { details } : {})
-  });
-}
+type SelectDestinationOptions = {
+  signal?: AbortSignal | undefined;
+  requestId?: string | undefined;
+  deadlineMs?: number | undefined;
+};
 
 export async function selectDestination(
   input: SelectDestinationInput,
   env: Env,
-  signal?: AbortSignal,
-  requestId?: string,
-  deadlineMs?: number
+  options?: SelectDestinationOptions
 ): Promise<SelectDestinationResult> {
+  const { signal, requestId, deadlineMs } = options ?? {};
   let feedback: string | undefined;
   const startedAt = Date.now();
 
@@ -115,13 +113,20 @@ export async function selectDestination(
         return buildNoMatchMessage();
       }
 
+      const query = sanitizeQuery(llmResponse.query);
+      if (!query) {
+        feedback = "候補が空でした。具体的な地名や施設名を1件だけ返してください。";
+        logStage(requestId, "candidate_rejected", { attemptNumber, reason: "empty_after_sanitize" });
+        continue;
+      }
+
       const placeStartedAt = Date.now();
       logStage(requestId, "places_started", {
         attemptNumber
       });
 
       const place = await resolvePlace(env, {
-        query: llmResponse.query,
+        query,
         origin: input.origin,
         durationMinutes: input.durationMinutes,
         tollRoadsAllowed: input.tollRoadsAllowed,
@@ -135,7 +140,7 @@ export async function selectDestination(
       });
 
       if (!place) {
-        feedback = `候補「${llmResponse.query}」は場所解決できませんでした。別の地名を1件だけ返してください。`;
+        feedback = `候補「${query}」は場所解決できませんでした。別の地名を1件だけ返してください。`;
         logStage(requestId, "candidate_rejected", {
           attemptNumber,
           reason: "place_unresolved"
@@ -165,7 +170,7 @@ export async function selectDestination(
       });
 
       if (!route) {
-        feedback = `候補「${llmResponse.query}」ではルートを組めませんでした。別の地名を1件だけ返してください。`;
+        feedback = `候補「${query}」ではルートを組めませんでした。別の地名を1件だけ返してください。`;
         logStage(requestId, "candidate_rejected", {
           attemptNumber,
           reason: "route_unavailable"
@@ -198,7 +203,7 @@ export async function selectDestination(
             : `${durationValidation.diffMinutes}分長すぎました`;
 
         feedback =
-          `候補「${llmResponse.query}」は片道${durationValidation.actualDurationMinutes}分で、` +
+          `候補「${query}」は片道${durationValidation.actualDurationMinutes}分で、` +
           `希望${input.durationMinutes}分より${mismatchDescription}。` +
           `許容帯は${durationValidation.minAllowedMinutes}〜${durationValidation.maxAllowedMinutes}分です。` +
           retryInstruction;

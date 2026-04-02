@@ -1,12 +1,12 @@
 import { LLM_PER_CALL_TIMEOUT_MS, LLM_READ_TIMEOUT_MS } from "@drive-map/shared";
 import { RequestAbortedError } from "../lib/abort";
 import { FetchTimeoutError, fetchWithTimeout } from "../lib/fetch-with-timeout";
-import { logInfo } from "../lib/logger";
+import { logStage as logLlmStage } from "../lib/logger";
 import { UpstreamServiceError } from "../lib/upstream-error";
 import { buildDestinationSelectionPrompt } from "../prompts/destination-selection";
 import { parseLlmResponse, type LlmResponse } from "../schema/llm-response";
 
-type SelectDestinationInput = {
+type LlmChatInput = {
   origin: { lat: number; lng: number };
   durationMinutes: number;
   tollRoadsAllowed: boolean;
@@ -176,12 +176,8 @@ async function readStreamedResponse(response: Response, requestId?: string, sign
 
     if (!firstChunkLogged && requestId) {
       firstChunkLogged = true;
-      logInfo({
-        requestId,
-        event: "llm_first_chunk_received",
-        details: {
-          accumulatedLength: content.length
-        }
+      logLlmStage(requestId, "llm_first_chunk_received", {
+        accumulatedLength: content.length
       });
     }
 
@@ -292,9 +288,16 @@ async function readStandardResponse(response: Response, requestId?: string, sign
   const text = await readResponseText(response, signal);
   logLlmStage(requestId, "llm_raw_body", {
     length: text.length,
-    preview: text.slice(0, 500)
+    preview: text.slice(0, 200)
   });
-  const payload = JSON.parse(text) as LlmStandardResponse;
+
+  let payload: LlmStandardResponse;
+  try {
+    payload = JSON.parse(text) as LlmStandardResponse;
+  } catch {
+    throw new UpstreamServiceError("openrouter", "LLM API returned invalid JSON");
+  }
+
   return parseLlmResponse(extractMessageContent(payload));
 }
 
@@ -313,21 +316,9 @@ function buildHeaders(env: Env): HeadersInit {
   return headers;
 }
 
-function logLlmStage(requestId: string | undefined, event: string, details?: Record<string, unknown>): void {
-  if (!requestId) {
-    return;
-  }
-
-  logInfo({
-    requestId,
-    event,
-    ...(details ? { details } : {})
-  });
-}
-
 export async function selectDestinationByLlm(
   env: Env,
-  input: SelectDestinationInput,
+  input: LlmChatInput,
   signal?: AbortSignal,
   requestId?: string,
   timeoutMs: number = LLM_PER_CALL_TIMEOUT_MS
@@ -391,7 +382,9 @@ export async function selectDestinationByLlm(
 
   const jsonStartedAt = Date.now();
   const contentType = response.headers.get("content-type") ?? "";
-  const remainingReadTimeoutMs = Math.max(1, LLM_READ_TIMEOUT_MS);
+  const fetchElapsedMs = jsonStartedAt - fetchStartedAt;
+  const callerRemainingMs = effectiveTimeoutMs - fetchElapsedMs;
+  const remainingReadTimeoutMs = Math.max(1, Math.min(LLM_READ_TIMEOUT_MS, callerRemainingMs));
   const { signal: readSignal, cleanup: cleanupReadTimeout } = createReadTimeoutSignal(remainingReadTimeoutMs, signal);
   let parsed: LlmResponse;
 
@@ -414,13 +407,9 @@ export async function selectDestinationByLlm(
     durationMs: Date.now() - jsonStartedAt
   });
 
-  try {
-    logLlmStage(requestId, "llm_validation_completed", {
-      result: parsed.result,
-      hasQuery: parsed.result === "ok"
-    });
-    return parsed;
-  } catch (error) {
-    throw new UpstreamServiceError("openrouter", error instanceof Error ? error.message : "Failed to validate LLM response");
-  }
+  logLlmStage(requestId, "llm_validation_completed", {
+    result: parsed.result,
+    hasQuery: parsed.result === "ok"
+  });
+  return parsed;
 }

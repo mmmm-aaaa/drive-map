@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type UseSpeechResult = {
   supported: boolean;
@@ -53,6 +53,7 @@ export function useSpeech(): UseSpeechResult {
       }
 
       try {
+        window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = "ja-JP";
         utterance.rate = 1;
@@ -70,6 +71,14 @@ export function useSpeech(): UseSpeechResult {
   const resetLastSpoken = useCallback(() => {
     lastSpokenKeyRef.current = null;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (supported) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [supported]);
 
   return {
     supported,

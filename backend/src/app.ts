@@ -6,7 +6,7 @@ import { jsonResponse } from "./lib/response";
 import { registerHealthRoute } from "./routes/health";
 import { registerNavigationStartRoute } from "./routes/navigation-start";
 
-type AppBindings = {
+export type AppBindings = {
   Bindings: Env;
   Variables: {
     requestId: string;
@@ -15,7 +15,9 @@ type AppBindings = {
 
 const SECURITY_HEADERS = {
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+  "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), fullscreen=(self)"

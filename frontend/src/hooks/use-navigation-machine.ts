@@ -61,23 +61,22 @@ export function useNavigationMachine(): NavigationMachineResult {
   const storeRef = useRef(store);
   storeRef.current = store;
 
-  const geolocation = useGeolocation();
   const {
     status: geolocationStatus,
     errorMessage: geolocationError,
     requestCurrentPosition,
     startWatching,
     stopWatching
-  } = geolocation;
-  const speech = useSpeech();
-  const wakeLock = useWakeLock();
-
-  const setSpeechEnabled = useCallback(
-    (enabled: boolean) => {
-      speech.setEnabled(enabled);
-    },
-    [speech]
-  );
+  } = useGeolocation();
+  const {
+    supported: speechSupported,
+    enabled: speechEnabled,
+    setEnabled: setSpeechEnabled,
+    initializeWithUserActivation,
+    speak,
+    resetLastSpoken
+  } = useSpeech();
+  const { requestWakeLock, releaseWakeLock } = useWakeLock();
 
   const patchStore = useCallback((updater: (current: NavigationStore) => NavigationStore) => {
     setStore((current) => {
@@ -128,7 +127,7 @@ export function useNavigationMachine(): NavigationMachineResult {
           offRouteConsecutiveCount: 0,
           stepSwitchConsecutiveCount: 0
         }));
-        void wakeLock.releaseWakeLock();
+        void releaseWakeLock();
         return;
       }
 
@@ -162,7 +161,7 @@ export function useNavigationMachine(): NavigationMachineResult {
           remainingStepDistanceMeters: routeDistance,
           currentBucket: null
         }));
-        speech.speak(OFF_ROUTE_INSTRUCTION, "off_route");
+        speak(OFF_ROUTE_INSTRUCTION, "off_route");
         return;
       }
 
@@ -222,10 +221,10 @@ export function useNavigationMachine(): NavigationMachineResult {
       }));
 
       if (shouldUpdateInstruction) {
-        speech.speak(instruction, `${nextStepIndex}:${bucket}`);
+        speak(instruction, `${nextStepIndex}:${bucket}`);
       }
     },
-    [patchStore, speech, wakeLock]
+    [patchStore, speak, releaseWakeLock]
   );
 
   useEffect(() => {
@@ -244,14 +243,14 @@ export function useNavigationMachine(): NavigationMachineResult {
           machineState: "error",
           errorMessage: failure.errorMessage
         }));
-        void wakeLock.releaseWakeLock();
+        void releaseWakeLock();
       }
     );
 
     return () => {
       stopWatching();
     };
-  }, [evaluatePosition, patchStore, startWatching, stopWatching, store.machineState, wakeLock]);
+  }, [evaluatePosition, patchStore, startWatching, stopWatching, store.machineState, releaseWakeLock]);
 
   const requestPermission = useCallback(async () => {
     patchStore((current) => ({
@@ -300,7 +299,7 @@ export function useNavigationMachine(): NavigationMachineResult {
       return;
     }
 
-    speech.initializeWithUserActivation("ナビを開始します。");
+    initializeWithUserActivation("ナビを開始します。");
 
     patchStore((state) => ({
       ...state,
@@ -346,11 +345,11 @@ export function useNavigationMachine(): NavigationMachineResult {
         stepSwitchConsecutiveCount: 0
       }));
 
-      if (speech.enabled) {
-        speech.speak(initialInstruction, "initial_instruction");
+      if (speechEnabled) {
+        speak(initialInstruction, "initial_instruction");
       }
 
-      await wakeLock.requestWakeLock();
+      await requestWakeLock();
     } catch (error) {
       patchStore((state) => ({
         ...state,
@@ -358,12 +357,12 @@ export function useNavigationMachine(): NavigationMachineResult {
         errorMessage: error instanceof Error ? error.message : "ナビ開始に失敗しました。"
       }));
     }
-  }, [formState, patchStore, speech, wakeLock]);
+  }, [formState, patchStore, speechEnabled, speak, initializeWithUserActivation, requestWakeLock]);
 
   const cancelNavigationSession = useCallback(async () => {
     stopWatching();
-    speech.resetLastSpoken();
-    await wakeLock.releaseWakeLock();
+    resetLastSpoken();
+    await releaseWakeLock();
 
     patchStore((current) => ({
       ...current,
@@ -372,7 +371,7 @@ export function useNavigationMachine(): NavigationMachineResult {
         currentInstruction: "ナビを終了しました。"
       })
     }));
-  }, [patchStore, speech, stopWatching, wakeLock]);
+  }, [patchStore, resetLastSpoken, stopWatching, releaseWakeLock]);
 
   const clearError = useCallback(() => {
     patchStore((current) => ({
@@ -403,8 +402,8 @@ export function useNavigationMachine(): NavigationMachineResult {
     cancelNavigationSession,
     clearError,
     arrow,
-    speechSupported: speech.supported,
-    speechEnabled: speech.enabled,
+    speechSupported,
+    speechEnabled,
     setSpeechEnabled
   };
 }

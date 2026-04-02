@@ -107,6 +107,7 @@ export function useGeolocation(): UseGeolocationResult {
       }
 
       stopWatching();
+
       const beginWatch = (): void => {
         watchIdRef.current = navigator.geolocation.watchPosition(
           (geoPosition) => {

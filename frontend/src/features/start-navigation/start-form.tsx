@@ -1,4 +1,5 @@
 import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from "@drive-map/shared";
+import { LoadingDots } from "../../components/loading-dots";
 import { formatDistance } from "../../lib/format";
 
 const MAX_DURATION_HOURS = Math.floor(MAX_DURATION_MINUTES / 60);
@@ -24,16 +25,6 @@ function normalizeDuration(hours: number, minutes: number): { hours: number; min
   let total = h * 60 + m;
   total = Math.max(MIN_DURATION_MINUTES, Math.min(MAX_DURATION_MINUTES, total));
   return { hours: Math.floor(total / 60), minutes: total % 60 };
-}
-
-function LoadingDots() {
-  return (
-    <span className="loading-dots">
-      <span />
-      <span />
-      <span />
-    </span>
-  );
 }
 
 export function StartNavigationForm(props: StartFormProps) {

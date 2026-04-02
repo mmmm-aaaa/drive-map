@@ -17,9 +17,7 @@ export async function handleStartNavigation(
       tollRoadsAllowed: input.tollRoadsAllowed
     },
     env,
-    signal,
-    requestId,
-    START_HARD_TIMEOUT_MS
+    { signal, requestId, deadlineMs: START_HARD_TIMEOUT_MS }
   );
 
   if (result.status === "ok") {

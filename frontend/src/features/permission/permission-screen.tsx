@@ -1,18 +1,10 @@
+import { LoadingDots } from "../../components/loading-dots";
+
 type PermissionScreenProps = {
   loading: boolean;
   errorMessage: string | null;
   onRequestPermission: () => void;
 };
-
-function LoadingDots() {
-  return (
-    <span className="loading-dots">
-      <span />
-      <span />
-      <span />
-    </span>
-  );
-}
 
 export function PermissionScreen(props: PermissionScreenProps) {
   return (

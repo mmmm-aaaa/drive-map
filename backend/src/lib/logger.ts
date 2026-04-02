@@ -62,3 +62,15 @@ export function logInfo(payload: LogPayload): void {
 export function logError(payload: LogPayload): void {
   writeLog("error", payload);
 }
+
+export function logStage(requestId: string | undefined, event: string, details?: Record<string, unknown>): void {
+  if (!requestId) {
+    return;
+  }
+
+  logInfo({
+    requestId,
+    event,
+    ...(details ? { details } : {})
+  });
+}

@@ -29,6 +29,71 @@ function createEnv(overrides?: Record<string, unknown>): Record<string, unknown>
   };
 }
 
+function createStartRequest(origin = "http://localhost:5173"): Request {
+  return new Request("http://localhost/api/navigation/start", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin
+    },
+    body: JSON.stringify({
+      origin: { lat: 35.0, lng: 139.0 },
+      durationMinutes: 90,
+      tollRoadsAllowed: true
+    })
+  });
+}
+
+function createSuccessfulNavigationFetchMock() {
+  return vi
+    .fn()
+    .mockResolvedValueOnce(
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                result: "ok",
+                query: "箱根"
+              })
+            }
+          }
+        ]
+      })
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({
+        places: [{ id: "place-1", displayName: { text: "箱根" }, formattedAddress: "神奈川県足柄下郡箱根町" }]
+      })
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({
+        routes: [
+          {
+            distanceMeters: 85000,
+            duration: "5400s",
+            polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
+            legs: [
+              {
+                steps: [
+                  {
+                    distanceMeters: 1000,
+                    staticDuration: "600s",
+                    maneuver: "TURN_RIGHT",
+                    navigationInstruction: { instructions: "右方向です" },
+                    polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
+                    startLocation: { latLng: { latitude: 35.0, longitude: 139.0 } },
+                    endLocation: { latLng: { latitude: 35.01, longitude: 139.01 } }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      })
+    );
+}
+
 describe("POST /api/navigation/start", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -40,68 +105,11 @@ describe("POST /api/navigation/start", () => {
   });
 
   it("returns ok for valid upstream responses", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  result: "ok",
-                  query: "箱根"
-                })
-              }
-            }
-          ]
-        })
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          places: [{ id: "place-1", displayName: { text: "箱根" }, formattedAddress: "神奈川県足柄下郡箱根町" }]
-        })
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          routes: [
-            {
-              distanceMeters: 85000,
-              duration: "5400s",
-              polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
-              legs: [
-                {
-                  steps: [
-                    {
-                      distanceMeters: 1000,
-                      staticDuration: "600s",
-                      maneuver: "TURN_RIGHT",
-                      navigationInstruction: { instructions: "右方向です" },
-                      polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
-                      startLocation: { latLng: { latitude: 35.0, longitude: 139.0 } },
-                      endLocation: { latLng: { latitude: 35.01, longitude: 139.01 } }
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        })
-      );
+    const fetchMock = createSuccessfulNavigationFetchMock();
 
     vi.stubGlobal("fetch", fetchMock);
 
-    const request = new Request("http://localhost/api/navigation/start", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: "http://localhost:5173"
-      },
-      body: JSON.stringify({
-        origin: { lat: 35.0, lng: 139.0 },
-        durationMinutes: 90,
-        tollRoadsAllowed: true
-      })
-    });
+    const request = createStartRequest();
 
     const response = await app.fetch(request, createEnv() as never);
     const payload = (await response.json()) as Record<string, unknown>;
@@ -110,6 +118,55 @@ describe("POST /api/navigation/start", () => {
     expect(payload.status).toBe("ok");
     expect((payload.ui as Record<string, unknown>).showDestinationName).toBe(false);
     expect(response.headers.get("content-security-policy")).toContain("default-src 'self'");
+  });
+
+  it("applies env defaults when LLM_MODEL and LLM_API_URL are omitted", async () => {
+    const fetchMock = createSuccessfulNavigationFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.fetch(
+      createStartRequest(),
+      createEnv({
+        LLM_MODEL: undefined,
+        LLM_API_URL: undefined
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+
+    const llmCall = fetchMock.mock.calls[0];
+    expect(llmCall?.[0]).toBe("https://openrouter.ai/api/v1/chat/completions");
+    const llmRequestInit = llmCall?.[1] as RequestInit;
+    const llmBody = JSON.parse(llmRequestInit.body as string) as { model?: string };
+    expect(llmBody.model).toBe("nvidia/nemotron-3-nano-30b-a3b:free");
+  });
+
+  it("normalizes APP_ORIGIN with trailing slash", async () => {
+    const fetchMock = createSuccessfulNavigationFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.fetch(
+      createStartRequest(),
+      createEnv({
+        APP_ORIGIN: "http://localhost:5173/"
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("normalizes APP_ORIGIN with path", async () => {
+    const fetchMock = createSuccessfulNavigationFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await app.fetch(
+      createStartRequest(),
+      createEnv({
+        APP_ORIGIN: "http://localhost:5173/app"
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
   });
 
   it("returns no_match when LLM responds no_match", async () => {
@@ -221,7 +278,7 @@ describe("POST /api/navigation/start", () => {
 
     let aborted = false;
 
-    const fetchMock = vi.fn().mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
       const signal = init?.signal;
 
       return new Promise<Response>((_resolve, reject) => {

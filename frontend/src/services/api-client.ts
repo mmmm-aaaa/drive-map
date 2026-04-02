@@ -1,4 +1,5 @@
 import type { StartNavigationRequest, StartNavigationResponse } from "@drive-map/shared";
+import { isStartNavigationStatus } from "@drive-map/shared";
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -21,11 +22,13 @@ export async function startNavigation(request: StartNavigationRequest): Promise<
     body: JSON.stringify(request)
   });
 
-  const payload = (await response.json().catch(() => null)) as StartNavigationResponse | null;
+  const raw: unknown = await response.json().catch(() => null);
 
-  if (!payload) {
+  if (!raw || typeof raw !== "object" || !("status" in raw) || typeof (raw as Record<string, unknown>).status !== "string" || !isStartNavigationStatus((raw as Record<string, unknown>).status as string)) {
     throw new ApiClientError(response.status, "レスポンスの解析に失敗しました。");
   }
+
+  const payload = raw as StartNavigationResponse;
 
   if (!response.ok) {
     if (payload.status === "validation_failed") {
