@@ -18,13 +18,22 @@ type StartFormProps = {
   onSubmit: () => void;
 };
 
-/** Clamp total to [MIN_DURATION_MINUTES, MAX_DURATION_MINUTES]; minutes stay in 0..59. */
 function normalizeDuration(hours: number, minutes: number): { hours: number; minutes: number } {
   const m = Math.max(0, Math.min(59, Math.round(Number.isFinite(minutes) ? minutes : 0)));
   const h = Math.max(0, Math.min(MAX_DURATION_HOURS, Math.round(Number.isFinite(hours) ? hours : 0)));
   let total = h * 60 + m;
   total = Math.max(MIN_DURATION_MINUTES, Math.min(MAX_DURATION_MINUTES, total));
   return { hours: Math.floor(total / 60), minutes: total % 60 };
+}
+
+function LoadingDots() {
+  return (
+    <span className="loading-dots">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
 }
 
 export function StartNavigationForm(props: StartFormProps) {
@@ -36,12 +45,14 @@ export function StartNavigationForm(props: StartFormProps) {
 
   return (
     <section className="panel">
+      <div className="panel-icon" aria-hidden="true">🚗</div>
       <h1 className="panel-title">出発条件の入力</h1>
-      <p className="panel-text">
-        出発地点: {props.currentLat.toFixed(5)}, {props.currentLng.toFixed(5)} (精度 {formatDistance(props.currentAccuracy)})
-      </p>
-      <div className="form-row">
-        <label htmlFor="duration-hours">片道時間（最短1時間）</label>
+      <div className="coords-readout">
+        {props.currentLat.toFixed(5)}, {props.currentLng.toFixed(5)} — 精度 {formatDistance(props.currentAccuracy)}
+      </div>
+
+      <div className="form-section">
+        <label className="form-label" htmlFor="duration-hours">片道時間（最短1時間）</label>
         <div className="inline-inputs">
           <input
             id="duration-hours"
@@ -59,7 +70,7 @@ export function StartNavigationForm(props: StartFormProps) {
               });
             }}
           />
-          <span>時間</span>
+          <span className="unit-label">時間</span>
           <input
             id="duration-minutes"
             type="number"
@@ -76,34 +87,44 @@ export function StartNavigationForm(props: StartFormProps) {
               });
             }}
           />
-          <span>分</span>
+          <span className="unit-label">分</span>
         </div>
       </div>
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={props.tollRoadsAllowed}
-          onChange={(event) => {
-            props.onChange({
-              durationHours: props.durationHours,
-              durationMinutes: props.durationMinutes,
-              tollRoadsAllowed: event.target.checked
-            });
-          }}
-        />
-        <span>有料道路を使う</span>
+
+      <label className="toggle-row">
+        <span className="toggle-label">有料道路を使う</span>
+        <span className="toggle-switch">
+          <input
+            type="checkbox"
+            checked={props.tollRoadsAllowed}
+            onChange={(event) => {
+              props.onChange({
+                durationHours: props.durationHours,
+                durationMinutes: props.durationMinutes,
+                tollRoadsAllowed: event.target.checked
+              });
+            }}
+          />
+          <span className="toggle-track" />
+        </span>
       </label>
+
       {props.speechSupported ? (
-        <label className="checkbox-row">
-          <input type="checkbox" checked={props.speechEnabled} onChange={(event) => props.onSpeechEnabledChange(event.target.checked)} />
-          <span>音声案内を使う</span>
+        <label className="toggle-row">
+          <span className="toggle-label">音声案内を使う</span>
+          <span className="toggle-switch">
+            <input type="checkbox" checked={props.speechEnabled} onChange={(event) => props.onSpeechEnabledChange(event.target.checked)} />
+            <span className="toggle-track" />
+          </span>
         </label>
       ) : (
-        <p className="panel-text muted">このブラウザでは音声案内に対応していません。</p>
+        <p className="toggle-unsupported">このブラウザでは音声案内に対応していません。</p>
       )}
+
       {durationError ? <p className="panel-error">{durationError}</p> : null}
+
       <button type="button" className="button-primary" onClick={props.onSubmit} disabled={Boolean(durationError) || props.loading}>
-        {props.loading ? "ナビ開始中..." : "ナビ開始"}
+        {props.loading ? <LoadingDots /> : "ナビ開始"}
       </button>
     </section>
   );

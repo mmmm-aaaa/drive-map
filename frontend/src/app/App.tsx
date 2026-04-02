@@ -31,7 +31,7 @@ export function App() {
   const navigationStatusLabel = useMemo(() => stateLabel(store.machineState), [store.machineState]);
 
   return (
-    <main className="app-root">
+    <main className="app-root" data-state={store.machineState}>
       <div className="screen-stack">
         {isPermissionView ? (
           <PermissionScreen
@@ -76,15 +76,17 @@ export function App() {
 
         {store.machineState === "error" ? <ErrorScreen message={store.errorMessage ?? "不明なエラーです。"} onRetry={navigation.clearError} /> : null}
       </div>
-      <footer className="legal-footer">
-        <a href="/legal/privacy.html" target="_blank" rel="noreferrer">
-          プライバシーポリシー
-        </a>
-        <span className="legal-separator">|</span>
-        <a href="/legal/terms.html" target="_blank" rel="noreferrer">
-          利用規約
-        </a>
-      </footer>
+      {!isNavigationView ? (
+        <footer className="legal-footer">
+          <a href="/legal/privacy.html" target="_blank" rel="noreferrer">
+            プライバシーポリシー
+          </a>
+          <span className="legal-separator">|</span>
+          <a href="/legal/terms.html" target="_blank" rel="noreferrer">
+            利用規約
+          </a>
+        </footer>
+      ) : null}
     </main>
   );
 }

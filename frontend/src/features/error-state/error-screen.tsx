@@ -6,6 +6,7 @@ type ErrorScreenProps = {
 export function ErrorScreen(props: ErrorScreenProps) {
   return (
     <section className="panel">
+      <div className="panel-icon panel-icon--error" aria-hidden="true">⚠</div>
       <h1 className="panel-title">エラーが発生しました</h1>
       <p className="panel-error">{props.message}</p>
       <button type="button" className="button-primary" onClick={props.onRetry}>
