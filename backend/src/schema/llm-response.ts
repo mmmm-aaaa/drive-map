@@ -1,14 +1,8 @@
-import { LLM_CANDIDATE_LIMIT } from "@drive-map/shared";
 import { z } from "zod";
-
-const llmCandidateSchema = z.object({
-  query: z.string().trim().min(1).max(120),
-  reason: z.string().trim().max(240).optional()
-});
 
 const llmOkSchema = z.object({
   result: z.literal("ok"),
-  candidates: z.array(llmCandidateSchema).min(1).max(LLM_CANDIDATE_LIMIT)
+  query: z.string().trim().min(1).max(120)
 });
 
 const llmNoMatchSchema = z.object({

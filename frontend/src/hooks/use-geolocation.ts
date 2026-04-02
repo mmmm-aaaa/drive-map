@@ -4,6 +4,7 @@ import { GEOLOCATION_OPTIONS } from "@drive-map/shared";
 import {
   createUnsupportedGeolocationFailure,
   mapGeolocationFailure,
+  shouldRetryWatchOnGeolocationFailure,
   type GeolocationFailure,
   type GeolocationFailureStatus
 } from "../lib/geolocation-error";
@@ -27,6 +28,11 @@ type UseGeolocationResult = {
   requestCurrentPosition: () => Promise<GeolocationRequestResult>;
   startWatching: (onPosition: (position: CurrentPosition) => void, onError?: (failure: GeolocationFailure) => void) => void;
   stopWatching: () => void;
+};
+
+const WATCH_GEOLOCATION_OPTIONS: PositionOptions = {
+  enableHighAccuracy: GEOLOCATION_OPTIONS.enableHighAccuracy,
+  maximumAge: GEOLOCATION_OPTIONS.maximumAge
 };
 
 function toCurrentPosition(position: GeolocationPosition): CurrentPosition {
@@ -101,22 +107,30 @@ export function useGeolocation(): UseGeolocationResult {
       }
 
       stopWatching();
+      const beginWatch = (): void => {
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          (geoPosition) => {
+            const current = toCurrentPosition(geoPosition);
+            setPosition(current);
+            setStatus("ready");
+            setErrorMessage(null);
+            onPosition(current);
+          },
+          (error) => {
+            const failure = mapGeolocationFailure(error);
+            if (shouldRetryWatchOnGeolocationFailure(failure)) {
+              stopWatching();
+              beginWatch();
+              return;
+            }
+            applyFailure(failure);
+            onError?.(failure);
+          },
+          WATCH_GEOLOCATION_OPTIONS
+        );
+      };
 
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (geoPosition) => {
-          const current = toCurrentPosition(geoPosition);
-          setPosition(current);
-          setStatus("ready");
-          setErrorMessage(null);
-          onPosition(current);
-        },
-        (error) => {
-          const failure = mapGeolocationFailure(error);
-          applyFailure(failure);
-          onError?.(failure);
-        },
-        GEOLOCATION_OPTIONS
-      );
+      beginWatch();
     },
     [applyFailure, stopWatching]
   );

@@ -10,6 +10,7 @@ services:
     environment:
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
+      VITE_API_PROXY_TARGET: "http://backend:8787"
     volumes:
       - ./frontend:/workspace/frontend
       - ./shared:/workspace/shared
@@ -26,12 +27,14 @@ services:
     ports:
       - "8787:8787"
     environment:
-      SAKURA_AI_API_KEY: ${SAKURA_AI_API_KEY:-}
-      SAKURA_AI_MODEL: ${SAKURA_AI_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-z-ai/glm-4.5-air:free}
+      LLM_API_URL: ${LLM_API_URL:-https://openrouter.ai/api/v1/chat/completions}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
       WRANGLER_SEND_METRICS: "false"
     volumes:
       - ./backend:/workspace/backend
+      - ./.env:/workspace/backend/.dev.vars:ro
       - ./shared:/workspace/shared
       - ./frontend:/workspace/frontend
       - ./tests:/workspace/tests

@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { parseLlmResponse } from "../../../backend/src/schema/llm-response";
 
 describe("parseLlmResponse", () => {
-  it("parses ok result with candidates", () => {
+  it("parses ok result with a single query", () => {
     const parsed = parseLlmResponse(
       JSON.stringify({
         result: "ok",
-        candidates: [{ query: "箱根", reason: "山道ドライブ向け" }]
+        query: "箱根"
       })
     );
 
     expect(parsed.result).toBe("ok");
     if (parsed.result === "ok") {
-      expect(parsed.candidates[0]?.query).toBe("箱根");
+      expect(parsed.query).toBe("箱根");
     }
   });
 
@@ -26,7 +26,7 @@ describe("parseLlmResponse", () => {
       parseLlmResponse(
         JSON.stringify({
           result: "ok",
-          candidates: []
+          query: ""
         })
       )
     ).toThrow();

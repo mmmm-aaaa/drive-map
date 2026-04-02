@@ -6,6 +6,8 @@
     "directory": "../frontend/dist"
   },
   "vars": {
+    "LLM_MODEL": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "LLM_API_URL": "https://openrouter.ai/api/v1/chat/completions",
     "APP_ORIGIN": "",
     "ALLOW_UNPROTECTED_START": "false"
   },

@@ -2,7 +2,7 @@ const TOLL_ROAD_SPEED_KMH = 80;
 const NON_TOLL_ROAD_SPEED_KMH = 40;
 const MIN_REACHABLE_DISTANCE_KM = 10;
 const MIN_PLACE_BIAS_RADIUS_METERS = 5_000;
-const MAX_PLACE_BIAS_RADIUS_METERS = 300_000;
+const MAX_PLACE_BIAS_RADIUS_METERS = 50_000;
 const PLACE_BIAS_RADIUS_MARGIN = 1.2;
 
 export function estimateAverageDrivingSpeedKmh(tollRoadsAllowed: boolean): number {

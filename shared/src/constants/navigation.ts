@@ -1,12 +1,15 @@
-export const MIN_DURATION_MINUTES = 30;
+export const MIN_DURATION_MINUTES = 60;
 export const MAX_DURATION_MINUTES = 1800;
 export const DURATION_TOLERANCE_MINUTES = 15;
 
-export const LLM_CANDIDATE_LIMIT = 3;
-export const LLM_RETRY_LIMIT = 2;
 export const PLACE_RESULT_LIMIT = 3;
 
-export const START_HARD_TIMEOUT_MS = 8_000;
+export const START_HARD_TIMEOUT_MS = 180_000;
+
+export const LLM_PER_CALL_TIMEOUT_MS = 30_000;
+export const LLM_READ_TIMEOUT_MS = 30_000;
+export const MIN_REMAINING_FOR_RETRY_MS = 15_000;
+export const RETRY_SAFETY_MARGIN_MS = 5_000;
 
 export const START_RATE_LIMIT_PERIOD_SECONDS = 10;
 export const START_RATE_LIMIT_MAX_REQUESTS = 1;

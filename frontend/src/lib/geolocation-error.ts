@@ -41,3 +41,7 @@ export function mapGeolocationFailure(error: GeolocationErrorLike): GeolocationF
     errorMessage: "位置情報の取得に失敗しました。"
   };
 }
+
+export function shouldRetryWatchOnGeolocationFailure(failure: GeolocationFailure): boolean {
+  return failure.status === "timeout";
+}

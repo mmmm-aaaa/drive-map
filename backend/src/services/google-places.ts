@@ -29,6 +29,21 @@ type GooglePlacesResponse = {
 };
 
 export async function searchPlacesByText(env: Env, params: SearchPlaceParams, signal?: AbortSignal): Promise<ResolvedPlace[]> {
+  const biasRadiusMeters = estimatePlaceBiasRadiusMeters(params.durationMinutes, params.tollRoadsAllowed);
+  const requestBody = {
+    textQuery: params.query,
+    maxResultCount: PLACE_RESULT_LIMIT,
+    locationBias: {
+      circle: {
+        center: {
+          latitude: params.origin.lat,
+          longitude: params.origin.lng
+        },
+        radius: biasRadiusMeters
+      }
+    }
+  };
+
   const response = await fetchWithTimeout(
     GOOGLE_PLACES_TEXT_SEARCH_URL,
     {
@@ -38,19 +53,7 @@ export async function searchPlacesByText(env: Env, params: SearchPlaceParams, si
         "X-Goog-Api-Key": env.GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask": "places.id,places.displayName.text,places.formattedAddress"
       },
-      body: JSON.stringify({
-        textQuery: params.query,
-        maxResultCount: PLACE_RESULT_LIMIT,
-        locationBias: {
-          circle: {
-            center: {
-              latitude: params.origin.lat,
-              longitude: params.origin.lng
-            },
-            radius: estimatePlaceBiasRadiusMeters(params.durationMinutes, params.tollRoadsAllowed)
-          }
-        }
-      })
+      body: JSON.stringify(requestBody)
     },
     {
       timeoutMs: 1_500,

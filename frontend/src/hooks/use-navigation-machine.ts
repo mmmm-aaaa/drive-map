@@ -295,7 +295,7 @@ export function useNavigationMachine(): NavigationMachineResult {
       patchStore((state) => ({
         ...state,
         machineState: "error",
-        errorMessage: `希望時間は ${MIN_DURATION_MINUTES}分〜${MAX_DURATION_MINUTES}分で入力してください。`
+        errorMessage: `希望時間は ${MIN_DURATION_MINUTES}分〜${MAX_DURATION_MINUTES}分で入力してください（最短1時間）。`
       }));
       return;
     }

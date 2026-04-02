@@ -22,6 +22,6 @@ describe("drive estimate helpers", () => {
 
   it("caps place bias radius inside the allowed range", () => {
     expect(estimatePlaceBiasRadiusMeters(5, false)).toBe(5_000);
-    expect(estimatePlaceBiasRadiusMeters(1_800, true)).toBe(300_000);
+    expect(estimatePlaceBiasRadiusMeters(1_800, true)).toBe(50_000);
   });
 });

@@ -16,8 +16,9 @@ function createEnv(overrides?: Record<string, unknown>): Record<string, unknown>
     ASSETS: {
       fetch: async () => new Response("Not Found", { status: 404 })
     },
-    SAKURA_AI_API_KEY: "test-sakura-key",
-    SAKURA_AI_MODEL: "test-model",
+    LLM_API_KEY: "test-openrouter-key",
+    LLM_MODEL: "test-model",
+    LLM_API_URL: "https://openrouter.ai/api/v1/chat/completions",
     GOOGLE_MAPS_API_KEY: "test-google-key",
     APP_ORIGIN: "http://localhost:5173",
     ALLOW_UNPROTECTED_START: "false",
@@ -48,7 +49,7 @@ describe("POST /api/navigation/start", () => {
               message: {
                 content: JSON.stringify({
                   result: "ok",
-                  candidates: [{ query: "箱根", reason: "ドライブ向け" }]
+                  query: "箱根"
                 })
               }
             }
@@ -215,90 +216,25 @@ describe("POST /api/navigation/start", () => {
     expect(payload.status).toBe("upstream_error");
   });
 
-  it("aborts upstream work when the start request times out", async () => {
+  it("aborts a hanging LLM call via per-call timeout and returns upstream_error", async () => {
     vi.useFakeTimers();
 
     let aborted = false;
-    const delayedJsonResponse = (body: unknown, delayMs: number): Promise<Response> =>
-      new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(jsonResponse(body));
-        }, delayMs);
-      });
 
-    const mismatchRoute = {
-      routes: [
-        {
-          distanceMeters: 20_000,
-          duration: "1800s",
-          polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
-          legs: [
-            {
-              steps: [
-                {
-                  distanceMeters: 1000,
-                  staticDuration: "600s",
-                  maneuver: "TURN_RIGHT",
-                  navigationInstruction: { instructions: "右方向です" },
-                  polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@" },
-                  startLocation: { latLng: { latitude: 35.0, longitude: 139.0 } },
-                  endLocation: { latLng: { latitude: 35.01, longitude: 139.01 } }
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    };
+    const fetchMock = vi.fn().mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  result: "ok",
-                  candidates: [{ query: "箱根" }, { query: "熱海" }, { query: "鎌倉" }]
-                })
-              }
-            }
-          ]
-        })
-      )
-      .mockImplementationOnce(() =>
-        delayedJsonResponse(
-          {
-            places: [{ id: "place-1", displayName: { text: "箱根" }, formattedAddress: "神奈川県足柄下郡箱根町" }]
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(
+          "abort",
+          () => {
+            aborted = true;
+            reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
           },
-          1_400
-        )
-      )
-      .mockImplementationOnce(() => delayedJsonResponse(mismatchRoute, 1_900))
-      .mockImplementationOnce(() =>
-        delayedJsonResponse(
-          {
-            places: [{ id: "place-2", displayName: { text: "熱海" }, formattedAddress: "静岡県熱海市" }]
-          },
-          1_400
-        )
-      )
-      .mockImplementationOnce(() => delayedJsonResponse(mismatchRoute, 1_900))
-      .mockImplementationOnce((_input: RequestInfo | URL, init?: RequestInit) => {
-        const signal = init?.signal;
-
-        return new Promise<Response>((_resolve, reject) => {
-          signal?.addEventListener(
-            "abort",
-            () => {
-              aborted = true;
-              reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
-            },
-            { once: true }
-          );
-        });
+          { once: true }
+        );
       });
+    });
 
     vi.stubGlobal("fetch", fetchMock);
 
@@ -321,9 +257,54 @@ describe("POST /api/navigation/start", () => {
     const response = await responsePromise;
     const payload = (await response.json()) as Record<string, unknown>;
 
-    expect(response.status).toBe(504);
+    expect(response.status).toBe(502);
     expect(payload.status).toBe("upstream_error");
     expect(aborted).toBe(true);
+  });
+
+  it("aborts a stalled streaming LLM response via per-call timeout", async () => {
+    vi.useFakeTimers();
+
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array>;
+
+    const fetchMock = vi.fn().mockImplementationOnce(() =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streamController = controller;
+              controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"{\\"result\\":"}}]}\n\n'));
+            }
+          }),
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        )
+      )
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request("http://localhost/api/navigation/start", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:5173"
+      },
+      body: JSON.stringify({
+        origin: { lat: 35.0, lng: 139.0 },
+        durationMinutes: 90,
+        tollRoadsAllowed: true
+      })
+    });
+
+    const responsePromise = app.fetch(request, createEnv() as never);
+    await vi.advanceTimersByTimeAsync(START_HARD_TIMEOUT_MS);
+
+    const response = await responsePromise;
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(502);
+    expect(payload.status).toBe("upstream_error");
   });
 });
 

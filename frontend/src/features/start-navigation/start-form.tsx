@@ -1,6 +1,8 @@
 import { MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from "@drive-map/shared";
 import { formatDistance } from "../../lib/format";
 
+const MAX_DURATION_HOURS = Math.floor(MAX_DURATION_MINUTES / 60);
+
 type StartFormProps = {
   durationHours: number;
   durationMinutes: number;
@@ -16,20 +18,20 @@ type StartFormProps = {
   onSubmit: () => void;
 };
 
+/** Clamp total to [MIN_DURATION_MINUTES, MAX_DURATION_MINUTES]; minutes stay in 0..59. */
 function normalizeDuration(hours: number, minutes: number): { hours: number; minutes: number } {
-  const normalizedMinutes = Math.max(0, Math.min(59, minutes));
-  const normalizedHours = Math.max(0, Math.min(30, hours));
-  return {
-    hours: normalizedHours,
-    minutes: normalizedMinutes
-  };
+  const m = Math.max(0, Math.min(59, Math.round(Number.isFinite(minutes) ? minutes : 0)));
+  const h = Math.max(0, Math.min(MAX_DURATION_HOURS, Math.round(Number.isFinite(hours) ? hours : 0)));
+  let total = h * 60 + m;
+  total = Math.max(MIN_DURATION_MINUTES, Math.min(MAX_DURATION_MINUTES, total));
+  return { hours: Math.floor(total / 60), minutes: total % 60 };
 }
 
 export function StartNavigationForm(props: StartFormProps) {
   const totalMinutes = props.durationHours * 60 + props.durationMinutes;
   const durationError =
     totalMinutes < MIN_DURATION_MINUTES || totalMinutes > MAX_DURATION_MINUTES
-      ? `希望時間は ${MIN_DURATION_MINUTES}分〜${MAX_DURATION_MINUTES}分の範囲で入力してください。`
+      ? `希望時間は ${MIN_DURATION_MINUTES}分〜${MAX_DURATION_MINUTES}分の範囲で入力してください（最短は1時間です）。`
       : null;
 
   return (
@@ -39,13 +41,14 @@ export function StartNavigationForm(props: StartFormProps) {
         出発地点: {props.currentLat.toFixed(5)}, {props.currentLng.toFixed(5)} (精度 {formatDistance(props.currentAccuracy)})
       </p>
       <div className="form-row">
-        <label htmlFor="duration-hours">片道時間</label>
+        <label htmlFor="duration-hours">片道時間（最短1時間）</label>
         <div className="inline-inputs">
           <input
             id="duration-hours"
             type="number"
             min={0}
-            max={30}
+            max={MAX_DURATION_HOURS}
+            step={1}
             value={props.durationHours}
             onChange={(event) => {
               const next = normalizeDuration(Number(event.target.value), props.durationMinutes);
@@ -58,9 +61,11 @@ export function StartNavigationForm(props: StartFormProps) {
           />
           <span>時間</span>
           <input
+            id="duration-minutes"
             type="number"
             min={0}
             max={59}
+            step={1}
             value={props.durationMinutes}
             onChange={(event) => {
               const next = normalizeDuration(props.durationHours, Number(event.target.value));

@@ -12,10 +12,19 @@ describe("navigationStartRequestSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts duration with hour-and-minute style totals", () => {
+    const oneHourOne = navigationStartRequestSchema.safeParse({
+      origin: { lat: 35, lng: 139 },
+      durationMinutes: 61,
+      tollRoadsAllowed: true
+    });
+    expect(oneHourOne.success).toBe(true);
+  });
+
   it("rejects duration outside allowed range", () => {
     const tooShort = navigationStartRequestSchema.safeParse({
       origin: { lat: 35, lng: 139 },
-      durationMinutes: 29,
+      durationMinutes: 59,
       tollRoadsAllowed: true
     });
     const tooLong = navigationStartRequestSchema.safeParse({

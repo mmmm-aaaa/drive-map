@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createUnsupportedGeolocationFailure, mapGeolocationFailure } from "../../../frontend/src/lib/geolocation-error";
+import {
+  createUnsupportedGeolocationFailure,
+  mapGeolocationFailure,
+  shouldRetryWatchOnGeolocationFailure
+} from "../../../frontend/src/lib/geolocation-error";
 
 function createGeolocationError(code: number) {
   return {
@@ -42,5 +46,21 @@ describe("geolocation error helpers", () => {
       status: "error",
       errorMessage: "位置情報の取得に失敗しました。"
     });
+  });
+
+  it("only retries watchPosition when the failure is a timeout", () => {
+    expect(
+      shouldRetryWatchOnGeolocationFailure({
+        status: "timeout",
+        errorMessage: "位置情報の取得がタイムアウトしました。通信状況を確認して再試行してください。"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldRetryWatchOnGeolocationFailure({
+        status: "unavailable",
+        errorMessage: "現在地を取得できませんでした。屋外で再試行してください。"
+      })
+    ).toBe(false);
   });
 });

@@ -8,8 +8,9 @@ interface WorkerRateLimitBinding {
 
 interface Env {
   ASSETS: Fetcher;
-  SAKURA_AI_API_KEY: string;
-  SAKURA_AI_MODEL: string;
+  LLM_API_KEY: string;
+  LLM_MODEL: string;
+  LLM_API_URL: string;
   GOOGLE_MAPS_API_KEY: string;
   APP_ORIGIN?: string;
   ALLOW_UNPROTECTED_START?: string;

@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Hono } from "hono";
 import type { StartNavigationResponse } from "@drive-map/shared";
 import { handleStartNavigation } from "../handlers/start-navigation";
+import { parseEnv } from "../env";
 import { RequestAbortedError, combineAbortSignals, isAbortError } from "../lib/abort";
 import { checkStartRateLimit } from "../lib/rate-limit";
 import { jsonResponse } from "../lib/response";
@@ -42,6 +43,11 @@ function getConfiguredOrigin(env: Env): string | null {
   return origin ? origin : null;
 }
 
+type StartNavigationOutcome =
+  | { type: "success"; result: StartNavigationResponse }
+  | { type: "error"; error: unknown }
+  | { type: "timeout" };
+
 export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variables: { requestId: string } }>): void {
   app.post("/api/navigation/start", async (c) => {
     const requestId = c.get("requestId");
@@ -51,7 +57,17 @@ export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variable
       return jsonResponse(c, 415, buildValidationError("application/json で送信してください。"));
     }
 
-    const appOrigin = getConfiguredOrigin(c.env);
+    let env: Env;
+    try {
+      env = {
+        ...c.env,
+        ...parseEnv(c.env)
+      };
+    } catch {
+      return jsonResponse(c, 503, buildUpstreamError("サーバー設定が未完了です。環境変数を確認してください。"));
+    }
+
+    const appOrigin = getConfiguredOrigin(env);
     if (!appOrigin) {
       return jsonResponse(c, 503, buildUpstreamError("サーバー設定が未完了です。公開設定を確認してください。"));
     }
@@ -89,27 +105,58 @@ export function registerNavigationStartRoute(app: Hono<{ Bindings: Env; Variable
     }
 
     const timeoutController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      timeoutController.abort(new RequestAbortedError("Start navigation timed out"));
-    }, START_HARD_TIMEOUT_MS);
     const { signal, cleanup } = combineAbortSignals([c.req.raw.signal, timeoutController.signal]);
+    const navigationPromise: Promise<StartNavigationOutcome> = handleStartNavigation(parsed.data, env, signal, requestId)
+      .then((result): StartNavigationOutcome => ({
+        type: "success",
+        result
+      }))
+      .catch((error: unknown): StartNavigationOutcome => ({
+        type: "error",
+        error
+      }));
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise: Promise<StartNavigationOutcome> = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
+        timeoutController.abort(new RequestAbortedError("Start navigation timed out"));
+        resolve({ type: "timeout" });
+      }, START_HARD_TIMEOUT_MS);
+    });
 
     try {
-      const result = await handleStartNavigation(parsed.data, c.env, signal);
-      const statusCode = result.status === "ok" || result.status === "no_match" ? 200 : 502;
-      return jsonResponse(c, statusCode, result);
-    } catch (error) {
-      if (timeoutController.signal.aborted && isAbortError(error)) {
+      const outcome = await Promise.race([navigationPromise, timeoutPromise]);
+
+      if (outcome.type === "timeout") {
         return jsonResponse(c, 504, buildUpstreamError("ナビ開始処理がタイムアウトしました。時間をおいて再試行してください。"));
       }
 
+      if (outcome.type === "error") {
+        const { error } = outcome;
+
+        if (timeoutController.signal.aborted && isAbortError(error)) {
+          return jsonResponse(c, 504, buildUpstreamError("ナビ開始処理がタイムアウトしました。時間をおいて再試行してください。"));
+        }
+
+        if (c.req.raw.signal.aborted && isAbortError(error)) {
+          return jsonResponse(c, 408, buildUpstreamError("リクエストが中断されました。"));
+        }
+
+        throw error;
+      }
+
+      const statusCode = outcome.result.status === "ok" || outcome.result.status === "no_match" ? 200 : 502;
+      return jsonResponse(c, statusCode, outcome.result);
+    } catch (error) {
       if (c.req.raw.signal.aborted && isAbortError(error)) {
         return jsonResponse(c, 408, buildUpstreamError("リクエストが中断されました。"));
       }
 
       throw error;
     } finally {
-      clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       cleanup();
     }
   });

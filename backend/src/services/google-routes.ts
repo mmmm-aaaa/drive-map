@@ -26,8 +26,7 @@ type GoogleRoutesResponse = {
       steps?: Array<{
         distanceMeters?: number;
         staticDuration?: string;
-        maneuver?: string;
-        navigationInstruction?: { instructions?: string };
+        navigationInstruction?: { instructions?: string; maneuver?: string };
         polyline?: { encodedPolyline?: string };
         startLocation?: { latLng?: GoogleLatLng };
         endLocation?: { latLng?: GoogleLatLng };
@@ -80,7 +79,7 @@ export async function computeRoute(env: Env, params: ComputeRouteParams, signal?
         "Content-Type": "application/json",
         "X-Goog-Api-Key": env.GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction.instructions,routes.legs.steps.maneuver,routes.legs.steps.polyline.encodedPolyline,routes.legs.steps.startLocation.latLng,routes.legs.steps.endLocation.latLng"
+          "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction.instructions,routes.legs.steps.navigationInstruction.maneuver,routes.legs.steps.polyline.encodedPolyline,routes.legs.steps.startLocation.latLng,routes.legs.steps.endLocation.latLng"
       },
       body: JSON.stringify({
         origin: {
@@ -119,6 +118,10 @@ export async function computeRoute(env: Env, params: ComputeRouteParams, signal?
   });
 
   if (!response.ok) {
+    if (response.status === 400) {
+      return null;
+    }
+
     throw new UpstreamServiceError("google_routes", `Google Routes API returned HTTP ${response.status}`);
   }
 
@@ -147,7 +150,7 @@ export async function computeRoute(env: Env, params: ComputeRouteParams, signal?
       distanceMeters: Math.max(0, Math.round(step.distanceMeters ?? 0)),
       durationSeconds: parseDurationSeconds(step.staticDuration),
       instruction: step.navigationInstruction?.instructions?.trim() || DEFAULT_STEP_INSTRUCTION,
-      maneuver: step.maneuver ?? null,
+      maneuver: step.navigationInstruction?.maneuver ?? null,
       polyline: step.polyline?.encodedPolyline ?? "",
       startLocation,
       endLocation
