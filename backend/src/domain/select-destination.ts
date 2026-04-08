@@ -153,7 +153,7 @@ export async function selectDestination(
         attemptNumber
       });
 
-      const route = await computeRoute(
+      const routes = await computeRoute(
         env,
         {
           origin: input.origin,
@@ -166,10 +166,10 @@ export async function selectDestination(
       logStage(requestId, "routes_completed", {
         attemptNumber,
         durationMs: Date.now() - routesStartedAt,
-        found: Boolean(route)
+        foundCount: routes.length
       });
 
-      if (!route) {
+      if (routes.length === 0) {
         feedback = `候補「${query}」ではルートを組めませんでした。別の地名を1件だけ返してください。`;
         logStage(requestId, "candidate_rejected", {
           attemptNumber,
@@ -178,10 +178,24 @@ export async function selectDestination(
         continue;
       }
 
-      const durationValidation = validateRouteDuration(route.durationSeconds, input.durationMinutes);
+      const validatedRoutes = routes.map((route) => {
+        return {
+          route,
+          validation: validateRouteDuration(route.durationSeconds, input.durationMinutes)
+        };
+      });
+
+      const validRoutes = validatedRoutes.filter((v) => v.validation.ok);
+      const bestRouteInfo = validRoutes.length > 0
+        ? validRoutes.reduce((prev, curr) => (curr.validation.diffMinutes < prev.validation.diffMinutes ? curr : prev))
+        : validatedRoutes.reduce((prev, curr) => (curr.validation.diffMinutes < prev.validation.diffMinutes ? curr : prev));
+
+      const { route: bestRoute, validation: durationValidation } = bestRouteInfo;
+
       logStage(requestId, "route_validated", {
         attemptNumber,
         ok: durationValidation.ok,
+        totalRoutesReturned: routes.length,
         ...(durationValidation.ok
           ? {}
           : {
@@ -219,7 +233,7 @@ export async function selectDestination(
 
       return {
         status: "ok",
-        route
+        route: bestRoute
       };
     }
 

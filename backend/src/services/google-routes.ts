@@ -70,7 +70,7 @@ function parseLatLng(value: GoogleLatLng | undefined): LatLng | null {
   };
 }
 
-export async function computeRoute(env: Env, params: ComputeRouteParams, signal?: AbortSignal): Promise<NavigationRoute | null> {
+export async function computeRoute(env: Env, params: ComputeRouteParams, signal?: AbortSignal): Promise<NavigationRoute[]> {
   const response = await fetchWithTimeout(
     GOOGLE_ROUTES_URL,
     {
@@ -98,7 +98,7 @@ export async function computeRoute(env: Env, params: ComputeRouteParams, signal?
         routeModifiers: {
           avoidTolls: !params.tollRoadsAllowed
         },
-        computeAlternativeRoutes: false,
+        computeAlternativeRoutes: true,
         languageCode: "ja",
         units: "METRIC"
       })
@@ -119,7 +119,7 @@ export async function computeRoute(env: Env, params: ComputeRouteParams, signal?
 
   if (!response.ok) {
     if (response.status === 400) {
-      return null;
+      return [];
     }
 
     throw new UpstreamServiceError("google_routes", `Google Routes API returned HTTP ${response.status}`);
@@ -132,41 +132,44 @@ export async function computeRoute(env: Env, params: ComputeRouteParams, signal?
     throw new UpstreamServiceError("google_routes", "Failed to parse Google Routes response JSON");
   }
 
-  const firstRoute = payload.routes?.[0];
-  if (!firstRoute) {
-    return null;
+  if (!payload.routes || payload.routes.length === 0) {
+    return [];
   }
 
-  const stepsRaw = firstRoute.legs?.flatMap((leg) => leg.steps ?? []) ?? [];
-  const routeSteps: RouteStep[] = [];
-  let fallbackStart: LatLng = params.origin;
+  const results: NavigationRoute[] = [];
 
-  for (const [index, step] of stepsRaw.entries()) {
-    const startLocation = parseLatLng(step.startLocation?.latLng) ?? fallbackStart;
-    const endLocation = parseLatLng(step.endLocation?.latLng) ?? startLocation;
+  for (const route of payload.routes) {
+    const stepsRaw = route.legs?.flatMap((leg) => leg.steps ?? []) ?? [];
+    const routeSteps: RouteStep[] = [];
+    let fallbackStart: LatLng = params.origin;
 
-    routeSteps.push({
-      index,
-      distanceMeters: Math.max(0, Math.round(step.distanceMeters ?? 0)),
-      durationSeconds: parseDurationSeconds(step.staticDuration),
-      instruction: step.navigationInstruction?.instructions?.trim() || DEFAULT_STEP_INSTRUCTION,
-      maneuver: step.navigationInstruction?.maneuver ?? null,
-      polyline: step.polyline?.encodedPolyline ?? "",
-      startLocation,
-      endLocation
-    });
+    for (const [index, step] of stepsRaw.entries()) {
+      const startLocation = parseLatLng(step.startLocation?.latLng) ?? fallbackStart;
+      const endLocation = parseLatLng(step.endLocation?.latLng) ?? startLocation;
 
-    fallbackStart = endLocation;
+      routeSteps.push({
+        index,
+        distanceMeters: Math.max(0, Math.round(step.distanceMeters ?? 0)),
+        durationSeconds: parseDurationSeconds(step.staticDuration),
+        instruction: step.navigationInstruction?.instructions?.trim() || DEFAULT_STEP_INSTRUCTION,
+        maneuver: step.navigationInstruction?.maneuver ?? null,
+        polyline: step.polyline?.encodedPolyline ?? "",
+        startLocation,
+        endLocation
+      });
+
+      fallbackStart = endLocation;
+    }
+
+    if (routeSteps.length > 0) {
+      results.push({
+        distanceMeters: Math.max(0, Math.round(route.distanceMeters ?? 0)),
+        durationSeconds: parseDurationSeconds(route.duration),
+        polyline: route.polyline?.encodedPolyline ?? "",
+        steps: routeSteps
+      });
+    }
   }
 
-  if (routeSteps.length === 0) {
-    return null;
-  }
-
-  return {
-    distanceMeters: Math.max(0, Math.round(firstRoute.distanceMeters ?? 0)),
-    durationSeconds: parseDurationSeconds(firstRoute.duration),
-    polyline: firstRoute.polyline?.encodedPolyline ?? "",
-    steps: routeSteps
-  };
+  return results;
 }
