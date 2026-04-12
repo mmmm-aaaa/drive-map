@@ -7,7 +7,6 @@ const MAX_DURATION_HOURS = Math.floor(MAX_DURATION_MINUTES / 60);
 type StartFormProps = {
   durationHours: number;
   durationMinutes: number;
-  tollRoadsAllowed: boolean;
   currentLat: number;
   currentLng: number;
   currentAccuracy: number;
@@ -15,7 +14,7 @@ type StartFormProps = {
   speechSupported: boolean;
   speechEnabled: boolean;
   onSpeechEnabledChange: (enabled: boolean) => void;
-  onChange: (value: { durationHours: number; durationMinutes: number; tollRoadsAllowed: boolean }) => void;
+  onChange: (value: { durationHours: number; durationMinutes: number }) => void;
   onSubmit: () => void;
 };
 
@@ -56,8 +55,7 @@ export function StartNavigationForm(props: StartFormProps) {
               const next = normalizeDuration(Number(event.target.value), props.durationMinutes);
               props.onChange({
                 durationHours: next.hours,
-                durationMinutes: next.minutes,
-                tollRoadsAllowed: props.tollRoadsAllowed
+                durationMinutes: next.minutes
               });
             }}
           />
@@ -73,32 +71,13 @@ export function StartNavigationForm(props: StartFormProps) {
               const next = normalizeDuration(props.durationHours, Number(event.target.value));
               props.onChange({
                 durationHours: next.hours,
-                durationMinutes: next.minutes,
-                tollRoadsAllowed: props.tollRoadsAllowed
+                durationMinutes: next.minutes
               });
             }}
           />
           <span className="unit-label">分</span>
         </div>
       </div>
-
-      <label className="toggle-row">
-        <span className="toggle-label">有料道路を使う</span>
-        <span className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={props.tollRoadsAllowed}
-            onChange={(event) => {
-              props.onChange({
-                durationHours: props.durationHours,
-                durationMinutes: props.durationMinutes,
-                tollRoadsAllowed: event.target.checked
-              });
-            }}
-          />
-          <span className="toggle-track" />
-        </span>
-      </label>
 
       {props.speechSupported ? (
         <label className="toggle-row">

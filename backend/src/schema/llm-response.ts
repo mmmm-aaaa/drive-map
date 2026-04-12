@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const llmOkSchema = z.object({
   result: z.literal("ok"),
-  query: z.string().trim().min(1).max(120)
+  queries: z.array(z.string().trim().min(1).max(120)).min(1).max(3)
 });
 
 const llmNoMatchSchema = z.object({

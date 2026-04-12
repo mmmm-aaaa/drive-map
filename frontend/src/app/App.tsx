@@ -47,7 +47,6 @@ export function App() {
           <StartNavigationForm
             durationHours={navigation.formState.durationHours}
             durationMinutes={navigation.formState.durationMinutes}
-            tollRoadsAllowed={navigation.formState.tollRoadsAllowed}
             currentLat={store.position.lat}
             currentLng={store.position.lng}
             currentAccuracy={store.position.accuracy}

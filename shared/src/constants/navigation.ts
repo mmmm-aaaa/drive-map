@@ -1,15 +1,22 @@
 export const MIN_DURATION_MINUTES = 60;
 export const MAX_DURATION_MINUTES = 1800;
-export const DURATION_TOLERANCE_MINUTES = 15;
 
 export const PLACE_RESULT_LIMIT = 3;
 
-export const START_HARD_TIMEOUT_MS = 180_000;
+export const START_HARD_TIMEOUT_MS = 300_000;
 
-export const LLM_PER_CALL_TIMEOUT_MS = 30_000;
-export const LLM_READ_TIMEOUT_MS = 30_000;
-export const MIN_REMAINING_FOR_RETRY_MS = 15_000;
-export const RETRY_SAFETY_MARGIN_MS = 5_000;
+export const LLM_PER_CALL_TIMEOUT_MS = 60_000;
+export const LLM_READ_TIMEOUT_MS = 60_000;
+export const MIN_REMAINING_FOR_RETRY_MS = 30_000;
+export const RETRY_SAFETY_MARGIN_MS = 10_000;
+
+export const LLM_MODEL_GEMINI_FLASH_LITE = "gemini-3.1-flash-lite-preview";
+
+export const LLM_MODEL_SCHEDULE: readonly string[] = [
+  LLM_MODEL_GEMINI_FLASH_LITE,
+  LLM_MODEL_GEMINI_FLASH_LITE,
+  LLM_MODEL_GEMINI_FLASH_LITE,
+] as const;
 
 export const START_RATE_LIMIT_PERIOD_SECONDS = 10;
 export const START_RATE_LIMIT_MAX_REQUESTS = 1;

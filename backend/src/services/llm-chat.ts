@@ -6,6 +6,8 @@ import { UpstreamServiceError } from "../lib/upstream-error";
 import { buildDestinationSelectionPrompt } from "../prompts/destination-selection";
 import { parseLlmResponse, type LlmResponse } from "../schema/llm-response";
 
+const LLM_UPSTREAM_SERVICE = "google-ai-studio";
+
 type LlmChatInput = {
   origin: { lat: number; lng: number };
   durationMinutes: number;
@@ -128,7 +130,7 @@ function findEventDelimiter(buffer: string): { index: number; width: number } | 
 
 async function readStreamedResponse(response: Response, requestId?: string, signal?: AbortSignal): Promise<LlmResponse> {
   if (!response.body) {
-    throw new UpstreamServiceError("openrouter", "LLM API response does not contain a body");
+    throw new UpstreamServiceError(LLM_UPSTREAM_SERVICE, "LLM API response does not contain a body");
   }
 
   const reader = response.body.getReader();
@@ -233,7 +235,7 @@ async function readStreamedResponse(response: Response, requestId?: string, sign
       return fallback;
     }
 
-    throw new UpstreamServiceError("openrouter", "Failed to parse streamed LLM response");
+    throw new UpstreamServiceError(LLM_UPSTREAM_SERVICE, "Failed to parse streamed LLM response");
   } finally {
     signal?.removeEventListener("abort", cancelReader);
   }
@@ -241,7 +243,7 @@ async function readStreamedResponse(response: Response, requestId?: string, sign
 
 async function readResponseText(response: Response, signal?: AbortSignal): Promise<string> {
   if (!response.body) {
-    throw new UpstreamServiceError("openrouter", "LLM API response does not contain a body");
+    throw new UpstreamServiceError(LLM_UPSTREAM_SERVICE, "LLM API response does not contain a body");
   }
 
   const reader = response.body.getReader();
@@ -294,26 +296,28 @@ async function readStandardResponse(response: Response, requestId?: string, sign
   let payload: LlmStandardResponse;
   try {
     payload = JSON.parse(text) as LlmStandardResponse;
-  } catch {
-    throw new UpstreamServiceError("openrouter", "LLM API returned invalid JSON");
+  } catch (error) {
+    throw new UpstreamServiceError(
+      LLM_UPSTREAM_SERVICE,
+      `invalid_response_payload: ${error instanceof Error ? error.message : "LLM API returned invalid JSON"}`
+    );
   }
 
-  return parseLlmResponse(extractMessageContent(payload));
+  try {
+    return parseLlmResponse(extractMessageContent(payload));
+  } catch (error) {
+    throw new UpstreamServiceError(
+      LLM_UPSTREAM_SERVICE,
+      `invalid_response_payload: ${error instanceof Error ? error.message : "Failed to validate LLM response payload"}`
+    );
+  }
 }
 
 function buildHeaders(env: Env): HeadersInit {
-  const headers: Record<string, string> = {
+  return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${env.LLM_API_KEY}`
   };
-
-  if (env.APP_ORIGIN) {
-    headers["HTTP-Referer"] = env.APP_ORIGIN;
-  }
-
-  headers["X-Title"] = "drive-map";
-
-  return headers;
 }
 
 export async function selectDestinationByLlm(
@@ -321,9 +325,11 @@ export async function selectDestinationByLlm(
   input: LlmChatInput,
   signal?: AbortSignal,
   requestId?: string,
-  timeoutMs: number = LLM_PER_CALL_TIMEOUT_MS
+  timeoutMs: number = LLM_PER_CALL_TIMEOUT_MS,
+  modelOverride?: string
 ): Promise<LlmResponse> {
   const effectiveTimeoutMs = Math.max(1, timeoutMs);
+  const effectiveModel = modelOverride ?? env.LLM_MODEL;
   const prompt = buildDestinationSelectionPrompt(input);
   const fetchStartedAt = Date.now();
   logLlmStage(requestId, "llm_fetch_started", {
@@ -337,11 +343,11 @@ export async function selectDestinationByLlm(
       method: "POST",
       headers: buildHeaders(env),
       body: JSON.stringify({
-        model: env.LLM_MODEL,
+        model: effectiveModel,
         messages: [
           {
             role: "system",
-            content: "指定された制約で日本国内のドライブ目的地を1件だけ JSON で返してください。理由や説明は不要です。"
+            content: "指定された制約で日本国内のドライブ目的地の候補を最大3件 JSON で返してください。理由や説明は不要です。"
           },
           {
             role: "user",
@@ -350,7 +356,7 @@ export async function selectDestinationByLlm(
         ],
         stream: false,
         temperature: 0.5,
-        max_tokens: 64,
+        max_tokens: 128,
         response_format: {
           type: "json_object"
         }
@@ -367,7 +373,7 @@ export async function selectDestinationByLlm(
       throw error;
     }
 
-    throw new UpstreamServiceError("openrouter", error instanceof Error ? error.message : "LLM API request failed");
+    throw new UpstreamServiceError(LLM_UPSTREAM_SERVICE, error instanceof Error ? error.message : "LLM API request failed");
   });
 
   logLlmStage(requestId, "llm_headers_received", {
@@ -377,7 +383,7 @@ export async function selectDestinationByLlm(
   });
 
   if (!response.ok) {
-    throw new UpstreamServiceError("openrouter", `LLM API returned HTTP ${response.status}`);
+    throw new UpstreamServiceError(LLM_UPSTREAM_SERVICE, `LLM API returned HTTP ${response.status}`);
   }
 
   const jsonStartedAt = Date.now();
@@ -397,7 +403,7 @@ export async function selectDestinationByLlm(
         throw error;
       }
 
-      throw new UpstreamServiceError("openrouter", error instanceof Error ? error.message : "Failed to read LLM API stream");
+      throw new UpstreamServiceError(LLM_UPSTREAM_SERVICE, error instanceof Error ? error.message : "Failed to read LLM API stream");
     });
   } finally {
     cleanupReadTimeout();

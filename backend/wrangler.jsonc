@@ -6,8 +6,8 @@
     "directory": "../frontend/dist"
   },
   "vars": {
-    "LLM_MODEL": "nvidia/nemotron-3-nano-30b-a3b:free",
-    "LLM_API_URL": "https://openrouter.ai/api/v1/chat/completions",
+    "LLM_MODEL": "gemini-3.1-flash-lite-preview",
+    "LLM_API_URL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     "APP_ORIGIN": ""
   },
   "observability": {
@@ -17,16 +17,16 @@
     "staging": {
       "name": "drive-map-staging",
       "vars": {
-        "LLM_MODEL": "nvidia/nemotron-3-nano-30b-a3b:free",
-        "LLM_API_URL": "https://openrouter.ai/api/v1/chat/completions",
+        "LLM_MODEL": "gemini-3.1-flash-lite-preview",
+        "LLM_API_URL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "APP_ORIGIN": ""
       }
     },
     "production": {
       "name": "drive-map-production",
       "vars": {
-        "LLM_MODEL": "nvidia/nemotron-3-nano-30b-a3b:free",
-        "LLM_API_URL": "https://openrouter.ai/api/v1/chat/completions",
+        "LLM_MODEL": "gemini-3.1-flash-lite-preview",
+        "LLM_API_URL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "APP_ORIGIN": ""
       }
     }

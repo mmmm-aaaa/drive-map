@@ -4,9 +4,9 @@ import { selectDestinationByLlm } from "../../../backend/src/services/llm-chat";
 
 function createEnv(): Env {
   return {
-    LLM_API_KEY: "test-openrouter-key",
+    LLM_API_KEY: "test-google-ai-studio-key",
     LLM_MODEL: "test-model",
-    LLM_API_URL: "https://openrouter.ai/api/v1/chat/completions",
+    LLM_API_URL: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     APP_ORIGIN: "http://localhost:5173"
   } as Env;
 }
@@ -56,7 +56,7 @@ describe("selectDestinationByLlm", () => {
         tollRoadsAllowed: true
       })
     ).rejects.toMatchObject({
-      service: "openrouter",
+      service: "google-ai-studio",
       message: "LLM response body timed out"
     });
 

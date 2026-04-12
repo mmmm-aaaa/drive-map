@@ -9,11 +9,11 @@
 3. フロント: `http://localhost:5173`
 4. Worker: `http://localhost:8787`
 
-LLM は既定で OpenRouter の `nvidia/nemotron-3-nano-30b-a3b:free` を使います。必要な最低限の設定は以下です。
+LLM は既定で Google AI Studio の OpenAI 互換 API と `gemini-3.1-flash-lite-preview` を使います。必要な最低限の設定は以下です。
 
-- `LLM_API_KEY`: OpenRouter API キー
-- `LLM_MODEL`: 既定値は `nvidia/nemotron-3-nano-30b-a3b:free`
-- `LLM_API_URL`: 既定値は `https://openrouter.ai/api/v1/chat/completions`
+- `LLM_API_KEY`: Google AI Studio API キー
+- `LLM_MODEL`: 既定値は `gemini-3.1-flash-lite-preview`。現行の navigation retry スケジュールでは 3 回ともこのモデルを使う
+- `LLM_API_URL`: 既定値は `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
 - `GOOGLE_MAPS_API_KEY`: Google Maps Platform API キー
 - `VITE_API_PROXY_TARGET`: フロント開発サーバーから API を転送する先。通常ローカルは `http://localhost:8787`
 
@@ -33,8 +33,8 @@ Docker 開発では `frontend` コンテナに `VITE_API_PROXY_TARGET=http://bac
 
 1. `backend` に Cloudflare 用の secret を設定
    - `LLM_API_KEY`
-   - `LLM_MODEL`（省略時は `nvidia/nemotron-3-nano-30b-a3b:free`）
-   - `LLM_API_URL`（省略時は `https://openrouter.ai/api/v1/chat/completions`）
+   - `LLM_MODEL`（省略時は `gemini-3.1-flash-lite-preview`）
+   - `LLM_API_URL`（省略時は `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`）
    - `GOOGLE_MAPS_API_KEY`
 2. `npm run deploy`
 3. 公開後に `document/公開準備チェックリスト.md` を実施

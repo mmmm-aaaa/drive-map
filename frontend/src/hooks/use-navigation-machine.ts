@@ -23,7 +23,6 @@ import { useWakeLock } from "./use-wake-lock";
 type StartFormState = {
   durationHours: number;
   durationMinutes: number;
-  tollRoadsAllowed: boolean;
 };
 
 type NavigationMachineResult = {
@@ -54,8 +53,7 @@ export function useNavigationMachine(): NavigationMachineResult {
   const [store, setStore] = useState<NavigationStore>(createInitialNavigationStore);
   const [formState, setFormState] = useState<StartFormState>({
     durationHours: 1,
-    durationMinutes: 30,
-    tollRoadsAllowed: true
+    durationMinutes: 30
   });
 
   const storeRef = useRef(store);
@@ -313,8 +311,7 @@ export function useNavigationMachine(): NavigationMachineResult {
           lat: currentPosition.lat,
           lng: currentPosition.lng
         },
-        durationMinutes: requestedDuration,
-        tollRoadsAllowed: formState.tollRoadsAllowed
+        durationMinutes: requestedDuration
       });
 
       if (response.status !== "ok") {

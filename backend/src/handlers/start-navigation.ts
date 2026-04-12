@@ -14,7 +14,7 @@ export async function handleStartNavigation(
     {
       origin: input.origin,
       durationMinutes: input.durationMinutes,
-      tollRoadsAllowed: input.tollRoadsAllowed
+      tollRoadsAllowed: true
     },
     env,
     { signal, requestId, deadlineMs: START_HARD_TIMEOUT_MS }

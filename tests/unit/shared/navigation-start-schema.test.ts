@@ -5,8 +5,7 @@ describe("navigationStartRequestSchema", () => {
   it("accepts valid request body", () => {
     const result = navigationStartRequestSchema.safeParse({
       origin: { lat: 35, lng: 139 },
-      durationMinutes: 90,
-      tollRoadsAllowed: true
+      durationMinutes: 90
     });
 
     expect(result.success).toBe(true);
@@ -15,8 +14,7 @@ describe("navigationStartRequestSchema", () => {
   it("accepts duration with hour-and-minute style totals", () => {
     const oneHourOne = navigationStartRequestSchema.safeParse({
       origin: { lat: 35, lng: 139 },
-      durationMinutes: 61,
-      tollRoadsAllowed: true
+      durationMinutes: 61
     });
     expect(oneHourOne.success).toBe(true);
   });
@@ -24,13 +22,11 @@ describe("navigationStartRequestSchema", () => {
   it("rejects duration outside allowed range", () => {
     const tooShort = navigationStartRequestSchema.safeParse({
       origin: { lat: 35, lng: 139 },
-      durationMinutes: 59,
-      tollRoadsAllowed: true
+      durationMinutes: 59
     });
     const tooLong = navigationStartRequestSchema.safeParse({
       origin: { lat: 35, lng: 139 },
-      durationMinutes: 1801,
-      tollRoadsAllowed: true
+      durationMinutes: 1801
     });
 
     expect(tooShort.success).toBe(false);

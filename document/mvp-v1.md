@@ -1,6 +1,6 @@
 # MVP v1 記録
 
-更新日: 2026-04-03（本文ベースは 2026-04-02）。**本ファイル末尾の「9. 追記」**に、同日以降の実装・会話に基づく追記がある。
+更新日: 2026-04-12（本文ベースは 2026-04-02）。**本ファイル末尾の「9. 追記」**に、同日以降の実装・会話に基づく追記がある。
 
 ## 1. この文書の目的
 
@@ -75,7 +75,7 @@ Docker 前提で運用する。
   - `START_RATE_LIMIT` binding が無ければ fail-closed で `503`
   - ローカル開発時のみ `ALLOW_UNPROTECTED_START=true` で例外的に許可
   - rate limit 超過は `429`
-- hard timeout（180秒）
+- hard timeout（180秒 → **300 秒に変更済み、9.9 節参照**）
   - request timeout 時は `504`
   - route レベルで hard timeout を強制し、timeout / client disconnect の abort を下流の LLM / Places / Routes 呼び出しへ伝播する
 - client disconnect 時は `408`
@@ -85,15 +85,15 @@ Docker 前提で運用する。
   - `validation_failed`
   - `upstream_error`
 - LLM 呼び出しは汎用化されており、設定値で接続先を切り替えられる
-  - 現在の既定値は OpenRouter の Chat Completions API
-  - 既定 URL は `https://openrouter.ai/api/v1/chat/completions`
-  - 既定モデルは `nvidia/nemotron-3-nano-30b-a3b:free`
+  - 現在の既定値は Google AI Studio の OpenAI 互換 Chat Completions API
+  - 既定 URL は `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+  - 既定モデルは `gemini-3.1-flash-lite-preview`
   - 環境変数は `LLM_API_KEY` / `LLM_MODEL` / `LLM_API_URL` を使用する
-  - OpenRouter 向けに `HTTP-Referer` と `X-Title` を付与する
-  - OpenRouter には `stream: false` で問い合わせ、通常の JSON レスポンスとして読む
+  - Google AI Studio には Bearer token で認証する
+  - `stream: false` で問い合わせ、通常の JSON レスポンスとして読む
   - `text/event-stream` が返った場合は SSE を逐次パースして JSON が完成した時点で読み切るフォールバックも残している
   - LLM 出力契約は `{"result":"ok","query":"地名や施設名"}` または `{"result":"no_match"}` のみで、複数候補配列や `reason` は使わない
-  - LLM の fetch timeout は 30 秒（`LLM_PER_CALL_TIMEOUT_MS`）、レスポンスボディ読み取り timeout は別途 30 秒（`LLM_READ_TIMEOUT_MS`）
+  - LLM の fetch timeout は 30 秒（`LLM_PER_CALL_TIMEOUT_MS`）、レスポンスボディ読み取り timeout は別途 30 秒（`LLM_READ_TIMEOUT_MS`）（→ **各 60 秒に変更済み、9.9 節参照**）
   - LLM fetch は 429 / 5xx に対して最大 2 回リトライする（`retries: 2`, `retryDelayMs: 1_000`）
 - 候補の再質問フロー
   - 1回の LLM 応答で返す候補地は 1 件のみ
@@ -101,7 +101,7 @@ Docker 前提で運用する。
     - `place` 未解決
     - `Routes 400` または `route` なし
     - ルート所要時間が希望条件と不一致
-  - 再質問の上限は 2 回で、初回を含めた LLM 試行回数は最大 3 回
+  - 再質問の上限は 2 回で、初回を含めた LLM 試行回数は最大 3 回（現行でも同じ）
   - `Google Routes` の `HTTP 400` は fatal な upstream error ではなく、候補不採用として `null` 扱いにする
   - `Google Routes` の `400` 以外の非 `2xx` は upstream error として扱う
   - 再質問ループの先頭で `signal.aborted` を確認し、abort 済みなら即座に中断する
@@ -444,3 +444,203 @@ Vitest で以下を実装済み。
 - **この会話での実行確認（事実）**
   - `npm run test -- tests/integration/backend/navigation-start.test.ts` を実行し、**11 tests 全件成功**を確認
   - 同会話内で編集対象ファイルに対し lints を確認し、**エラーなし**を確認
+
+### 9.8 ロジック改修実装と再質問回数の変更（2026-04-12）
+
+本節は `document/ロジック改修計画.md` の実装結果と、その後の本会話での追加変更を、**現行ソースで確認できる事実だけ**に絞って記録する。
+
+- **出発座標ベースの地域別距離推定へ変更**（`backend/src/domain/drive-estimate.ts`）
+  - 地域区分は `tokyo_core` / `tokyo_outer` / `chukyo_core` / `kansai_core` / `regional_city` / `rural_default` の 6 種類。
+  - `resolveDriveRegionProfile()` で bbox 判定し、判定優先順は `tokyo_core` → `tokyo_outer` → `chukyo_core` → `kansai_core` → `regional_city` → `rural_default`。
+  - `kansai_core` と `chukyo_core` の間は `lng 136.45–136.55` を両方から除外し、**端点の `136.45` / `136.55` もどちらの core にも含めない**実装になっている。
+  - 到達距離は一律平均速度ではなく、`origin + durationMinutes + tollRoadsAllowed` を入力とする段階式へ変更された。
+  - 希望時間帯は `short`（<=180 分）/ `mid`（181〜360 分）/ `long`（361 分以上）の 3 バンド。
+  - 速度は、最初の 180 分に地域別速度、その後 180 分に全国共通中距離速度、それ以降に全国共通長距離速度を使って積み上げる。
+  - `buildDriveEstimateContext()` が `regionProfile` / `regionLabelJa` / `estimatedDistanceKm` / `durationBand` をまとめて返す。
+
+- **Places の `locationBias` も origin ベース推定へ追従**（`backend/src/services/google-places.ts`）
+  - `estimatePlaceBiasRadiusMeters(origin, durationMinutes, tollRoadsAllowed)` を使う実装へ変更された。
+  - Places の `locationBias.circle.radius` は引き続き `50_000m` 上限でクランプする。
+  - integration test では、`POST /api/navigation/start` 経由で Places Text Search に送る `locationBias.circle.radius` と中心座標を検証している（`tests/integration/backend/navigation-start.test.ts`）。
+
+- **ルート所要時間の許容幅は 3 段階になった**（`backend/src/domain/validate-route-duration.ts`）
+  - `60〜180 分`: `max(15分, 希望時間の20%)`、上限 `30 分`
+  - `181〜360 分`: `max(30分, 希望時間の25%)`、上限 `75 分`
+  - `361〜1800 分`: `max(45分, 希望時間の30%)`、上限 `180 分`
+  - `buildDurationWindowMinutes()` / `validateRouteDuration()` の返却形式自体は維持されている。
+
+- **LLM プロンプトは地域・時間適合優先へ変更**（`backend/src/prompts/destination-selection.ts`）
+  - プロンプトには、出発座標、地域ラベル、希望片道時間、許容時間帯、推定直線距離、有料道路可否、前回候補フィードバックを含める。
+  - 「全国的に有名かどうかは重視しない」「ローカルな具体地名・施設名でもよい」「Places Text Search で解決しやすい具体名を返す」を明示している。
+  - 旧来の東京駅基準の固定アンカー例（鎌倉、川越、箱根湯本など）は現行プロンプトから削除された。
+  - JSON 契約の説明は `{"result":"ok","query":"三島市"}` のような**実在の具体名**を例示し、`query` にプレースホルダーや説明文を書かないよう明示している。
+
+- **候補不一致時の再質問フィードバックが強化された**（`backend/src/domain/select-destination.ts`）
+  - `isPlaceholderDestinationQuery()` により、`地名や施設名` のような説明用プレースホルダー出力は不採用として再質問する。
+  - duration mismatch 時のフィードバックには、候補名、実際の片道分数、希望時間との差分分数、許容帯、次に欲しい方向（`もっと近い候補` / `もっと遠い候補`）を含める。
+  - このフィードバックは `backend/src/services/llm-chat.ts` を通じて次回の LLM プロンプトへ `feedback` として渡される。
+
+- **目的地の再質問上限を変更**（`backend/src/domain/select-destination.ts`）
+  - `LLM_REASK_LIMIT` は `LLM_MODEL_SCHEDULE.length - 1` によって決まり、現行では **2**。
+  - そのため、初回候補を含めた LLM 試行回数は **最大 3 回**である。
+  - 候補が空、プレースホルダー、Places 未解決、Routes 未取得、所要時間不一致のいずれでも再質問ループを継続し得る。残り時間が `MIN_REMAINING_FOR_RETRY_MS` 未満なら途中で打ち切って `no_match` を返す挙動は維持されている。
+
+- **テスト追加・更新**（`tests/unit/backend/*`, `tests/integration/backend/navigation-start.test.ts`, `tests/live/navigation-live.test.ts`）
+  - unit test:
+    - 地域判定、境界、段階式距離推定、Places 半径上限、duration band、推定コンテキスト
+    - 3 段階の時間許容幅
+    - 新しい目的地選定プロンプト
+    - プレースホルダー query 判定
+  - integration test:
+    - LLM プロンプトに地域ラベル・推定直線距離・長時間許容帯が入ること
+    - Places Text Search に origin ベースの `locationBias` 半径が送られること
+    - プレースホルダー query が続く場合に、`POST /api/navigation/start` が **3 回試行後に `no_match`** を返すこと
+  - live test:
+    - `tests/live/navigation-live.test.ts` を追加
+    - `RUN_LIVE_NAVIGATION_TESTS=true` と実 API キーがあるときだけ有効
+    - 固定座標 6 地点 × 希望時間 90 / 240 / 600 分で実 API を通す
+    - ログには `fixture`, `regionProfile`, `requestedDuration`, `estimatedDistanceKm`, `allowedWindow`, `apiStatus`, `llmQuery`, `resolvedPlaceName`, `routeDurationMinutes`, `diffMinutes`, `toleranceMinutes`, `okInBand` を出力する
+
+- **本ファイル本文との読み替え**
+  - **4.2 節**の「再質問の上限は 2 回で、初回を含めた LLM 試行回数は最大 3 回」は、現行実装でも **そのまま正**と読む。
+  - **4.2 節**の「hard timeout（180秒）」は、現行実装では **300 秒**（`START_HARD_TIMEOUT_MS = 300_000`）に読み替える（9.9 節参照）。
+  - **4.2 節**の「LLM の fetch timeout は 30 秒」「レスポンスボディ読み取り timeout は別途 30 秒」は、現行実装では **各 60 秒**に読み替える（9.9 節参照）。
+  - **4.2 節**の到達圏見積もり・許容幅・プロンプト記述のうち、一律速度・固定アンカー例・旧許容幅に関する説明は、現行実装では本節の内容を正とする。
+
+### 9.9 LLM モデルフォールバック戦略・累積フィードバック・timeout 変更（2026-04-12, 本会話での追加変更）
+
+本節は **9.8 の実装後**に、同日の本会話で追加・変更した事項を記録する。
+
+#### LLM モデルフォールバックスケジュール
+
+- **attempt ごとに使用する LLM モデルを切り替えるスケジュールを導入した**（`shared/src/constants/navigation.ts`, `backend/src/domain/select-destination.ts`, `backend/src/services/llm-chat.ts`）
+  - `LLM_MODEL_GEMINI_FLASH_LITE = "gemini-3.1-flash-lite-preview"`（Google AI Studio の軽量モデル）
+  - `LLM_MODEL_SCHEDULE.length` が外側の試行回数を決め、現行では 3 回試行する
+  - 実際に送るモデルは `env.LLM_MODEL` を使い、既定構成では 3 回とも `gemini-3.1-flash-lite-preview` を使用する
+  - 戦略: 3 回まで同一モデルで候補を探索し、不採用フィードバックを累積して精度を上げる
+  - `LLM_REASK_LIMIT` は `LLM_MODEL_SCHEDULE.length - 1` で決定される
+- **`selectDestinationByLlm` に `modelOverride` パラメータを追加した**（`backend/src/services/llm-chat.ts`）
+  - シグネチャ: `selectDestinationByLlm(env, input, signal?, requestId?, timeoutMs?, modelOverride?)`
+  - `modelOverride` が指定された場合、`env.LLM_MODEL` より優先される（`effectiveModel = modelOverride ?? env.LLM_MODEL`）
+  - `select-destination.ts` の再質問ループでは、現行構成では `env.LLM_MODEL` を `modelOverride` として渡す
+- **段階ログに `model` フィールドを追加した**（`backend/src/domain/select-destination.ts`）
+  - `llm_started` イベントに `model: modelForAttempt` を含め、各 attempt でどのモデルが使われたかを記録する
+
+#### 累積フィードバック
+
+- **再質問のフィードバックを単一文字列から履歴配列に変更した**（`backend/src/domain/select-destination.ts`）
+  - 従来: `feedback` 変数に最新の不採用理由のみを格納し、次の LLM 呼び出しに渡していた
+  - 変更後: `feedbackHistory: string[]` 配列にすべての不採用理由を蓄積し、`feedbackHistory.join("\n")` で結合して渡す
+  - これにより、LLM は過去のすべての不採用候補と理由を参照できるようになり、同じ方向に振れ続ける「振動」が抑制される
+- **プロンプトのフィードバック表示形式を変更した**（`backend/src/prompts/destination-selection.ts`）
+  - 従来: `前回候補のフィードバック: <単一メッセージ>`
+  - 変更後: `これまでの候補フィードバック（すべて考慮して次の候補を選ぶこと）:\n<累積メッセージ>`
+
+#### LLM 推定道路距離の追加
+
+- **プロンプトに推定道路距離を追加した**（`backend/src/prompts/destination-selection.ts`）
+  - 従来: `出発地からの推定直線距離の目安: 約 X km 圏内を念頭に置くこと（道路距離はこれより長くなる）`
+  - 変更後: `出発地からの推定直線距離の目安: 約 X km（推定道路距離: 約 Y km）`（`Y = Math.round(X * 1.3)`）
+  - LLM の距離感を補正し、直線距離と実走行距離の乖離による候補ミスマッチを軽減する
+
+#### LLM malformed JSON のリトライ対応
+
+- **LLM が不正な JSON を返した場合をリトライ可能なエラーとして扱うようにした**（`backend/src/domain/select-destination.ts`）
+  - 従来: `selectDestinationByLlm` が `UpstreamServiceError` を投げると再質問ループが即座に中断し、`upstream_error` として返却されていた
+  - 変更後: `UpstreamServiceError` のうち、`service === "google-ai-studio"` かつ `message` に `"invalid_"` を含むもの（JSON / schema の不正を示す）は、`feedbackHistory` に JSON 形式の修正指示を追加して `continue` する
+  - これにより、LLM がマークダウンコードブロック付きの JSON や不完全な JSON を返した場合でも、次の attempt で正しい形式を返す機会が得られる
+
+#### LLM retryable upstream error の再試行対応
+
+- **Google AI Studio の一時的な upstream failure を再質問ループ内で再試行するようにした**（`backend/src/domain/select-destination.ts`）
+  - 対象: `HTTP 429`, `HTTP 5xx`, timeout, body read stall, 一時的な fetch failure など
+  - 従来: `fetchWithTimeout` の内部リトライ（最大 2 回）が尽きた時点で、最初の attempt でも `upstream_error` で即終了していた
+  - 変更後: retryable と判定した `UpstreamServiceError("google-ai-studio", ...)` は `llm_retryable_error` を記録して `continue` し、残っている attempt / model schedule を使って再試行する
+  - 最終 attempt まで retryable upstream failure しか得られなかった場合は、従来どおり最終結果は `upstream_error` を返す
+
+#### timeout 定数の変更
+
+- **LLM 関連の timeout 定数を全面的に引き上げた**（`shared/src/constants/navigation.ts`）
+  - `START_HARD_TIMEOUT_MS`: `180_000`（3 分）→ `300_000`（5 分）
+  - `LLM_PER_CALL_TIMEOUT_MS`: `30_000`（30 秒）→ `60_000`（60 秒）
+  - `LLM_READ_TIMEOUT_MS`: `30_000`（30 秒）→ `60_000`（60 秒）
+  - `MIN_REMAINING_FOR_RETRY_MS`: `15_000`（15 秒）→ `30_000`（30 秒）
+  - `RETRY_SAFETY_MARGIN_MS`: `5_000`（5 秒）→ `10_000`（10 秒）
+  - 変更理由: 3 回までの LLM 呼び出しと body read stall を安全に吸収するには、従来の timeout では不足するため
+
+#### Vitest 設定の変更
+
+- **`vitest.config.ts` でルートの `.env` ファイルを自動読み込みするようにした**（`vitest.config.ts`）
+  - `loadEnvToRecord()` ヘルパーで `.env` を解析し、`test.env` に渡す
+  - `envPrefix: ["LLM_", "GOOGLE_MAPS_", "RUN_LIVE_", "VITE_"]` で必要な環境変数のみを Vitest に公開する
+  - これにより、live test 実行時に `.env` の API キーが自動的に利用可能になる
+
+#### live test の rate limit 対応
+
+- **fixture 間に待機時間を挿入した**（`tests/live/navigation-live.test.ts`）
+  - `INTER_FIXTURE_WAIT_MS = 20_000`（20 秒）を fixture 切り替え時および rate limit 検出時に挿入
+  - OpenRouter free tier の rate limit（リクエスト/分上限）に対応するため
+- **rate limit されたリクエストを成功率計算から除外するようにした**（`tests/live/navigation-live.test.ts`）
+  - `response.status === 502 && payload.status === "upstream_error"` を rate limit として検出
+  - rate limit されたケースは `rateLimited` カウンターに計上し、`tested` カウンターからは除外
+  - 全リクエストが rate limit された場合はアサーションをスキップする
+  - 成功率の閾値は `MIN_SUCCESS_RATE = 0.5`（テストされたケースの 50% 以上が成功すれば pass）
+- **live test のデフォルト LLM_MODEL を Gemini 3.1 Flash Lite に設定した**（`tests/live/navigation-live.test.ts`）
+  - `env.LLM_MODEL` のフォールバック値を `"gemini-3.1-flash-lite-preview"` に設定
+  - 現行実装では `env.LLM_MODEL` が各 attempt で実際に送られるモデルであり、`LLM_MODEL_SCHEDULE.length` は試行回数の上限を決める
+
+#### テスト
+
+- unit + integration test: **13 files / 66 tests** 成功（本会話確認時）
+- live test は rate limit の影響で全件テストが完了していないが、通過した件数では以下の結果を確認した:
+  - `nemotron-3-super-120b` 使用時（本会話以前の結果）: 3 件中 2 件成功
+    - tokyo_core 90 分: 箱根町芦ノ湖 → 107 分（OK, 1 発成功）
+    - tokyo_core 240 分: 長野市 → 200 分（OK, 3 回目成功 — 累積フィードバックが有効に機能）
+  - `arcee-ai/trinity-large-preview` 使用時: 1 件中 1 件成功
+    - regional_city 600 分: 富士山五合目 → 754 分（OK, 1 発成功）
+
+#### 本ファイル本文との読み替え（9.9 追加分）
+
+- **4.2 節**の `hard timeout（180秒）` は `300 秒` に読み替える。
+- **4.2 節**の `LLM の fetch timeout は 30 秒（LLM_PER_CALL_TIMEOUT_MS）` は `60 秒` に読み替える。
+- **4.2 節**の `レスポンスボディ読み取り timeout は別途 30 秒（LLM_READ_TIMEOUT_MS）` は `60 秒` に読み替える。
+- **4.2 節**の `再質問ループは残り時間を追跡し〜各リトライ前に remainingMs < MIN_REMAINING_FOR_RETRY_MS（15秒）なら` は `30 秒` に読み替える。
+- **4.2 節**の `既定モデルは nvidia/nemotron-3-nano-30b-a3b:free` は、現行では `gemini-3.1-flash-lite-preview` に読み替える。ただし実行時のモデル選択は `LLM_MODEL_SCHEDULE` で attempt ごとに決定される。
+- **4.2 節**の「失敗理由をフィードバックとして LLM に再質問する」は、現行実装では**すべての不採用理由を累積して渡す**方式に変更されている。
+- **9.4 節**の `12 files / 40 tests` は、現行では **13 files / 66 tests** に読み替える。
+
+### 9.10 距離推定ロジックの再調整と有料道路入力の廃止（2026-04-12, 本会話での追加変更）
+
+本節は **9.8 および 9.9 の実装後**に、同日の本会話で追加・変更した事項を記録する。
+
+#### 距離推定ロジックの再調整
+
+- **時間帯フェーズの閾値を短縮**（`backend/src/domain/drive-estimate.ts`）
+  - 従来: 最初の 180 分（地域別速度）、180〜360 分（中距離全国速度）、361 分以上（長距離全国速度）
+  - 変更後: 最初の 60 分（地域別速度）、60〜180 分（中距離全国速度）、181 分以上（長距離全国速度）
+  - 出発後 1 時間程度で高速道路などの幹線に乗れるという実態に合わせ、長距離移動時の推定到達距離が悲観的になりすぎる問題を解消した。
+- **有料道路利用時の想定速度（直線 km/h）を引き上げ**（`backend/src/domain/drive-estimate.ts`）
+  - `tokyo_core`: 30 → 35
+  - `kansai_core`: 40 → 45
+  - `chukyo_core`: 45 → 50
+  - `regional_city`: 50 → 55
+  - `rural_default`: 55 → 60
+  - 中距離全国（60〜180分）: 65 → 70
+  - （`tokyo_outer` 45、長距離全国 75 は据え置き）
+  - これにより、LLMプロンプト上で示される「推定道路距離（直線距離の1.3倍）」が実際の高速道路網の移動距離（平均 90km/h 程度）に合致するようになった。
+
+#### 有料道路利用の固定化と入力廃止
+
+- **フロントエンドの「有料道路を使う」トグルを削除**（`frontend/src/features/start-navigation/start-form.tsx`）
+- **API スキーマから `tollRoadsAllowed` を削除**（`backend/src/schema/navigation-start.ts`、`shared/src/api/navigation.ts`）
+- **バックエンド内部で `tollRoadsAllowed: true` を固定**（`backend/src/handlers/start-navigation.ts`）
+  - `selectDestination` への入力時に常に `tollRoadsAllowed: true` を指定するよう変更し、距離計算や Google Routes API へのリクエストは常に「有料道路利用前提」で動作する。
+- **LLM プロンプトへの補足指示追加**（`backend/src/prompts/destination-selection.ts`）
+  - `有料道路の利用は許可されています（出発地点から高速道路のインターチェンジが近い場合は所要時間を少し短めに、遠い場合は時間を長めに見積もって候補を選定してください）`
+  - 出発地から IC までの下道アクセス距離を LLM 側でも加味させる指示を追加。
+- **テストコードの追従**
+  - 上記の入力パラメータ変更に合わせ、各種 unit test, integration test, live test 内の `tollRoadsAllowed` パラメータ指定を削除（内部で `true` 固定のモック等は維持）し、全テストの通過を確認。
+
+#### 本ファイル本文との読み替え（9.10 追加分）
+
+- **2 節**の「希望片道時間（合計 60 分〜 30 時間、すなわち 60〜1800 分）と有料道路可否を入力できる」は、現行実装では**「有料道路可否の入力は廃止（内部的に利用ありで固定）」**に読み替える。

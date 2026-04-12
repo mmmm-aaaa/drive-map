@@ -5,7 +5,6 @@ import type { StartNavigationStatus } from "../domain/status";
 export type StartNavigationRequest = {
   origin: LatLng;
   durationMinutes: number;
-  tollRoadsAllowed: boolean;
 };
 
 export type StartNavigationSuccessResponse = {

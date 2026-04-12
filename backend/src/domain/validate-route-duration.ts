@@ -1,5 +1,3 @@
-import { DURATION_TOLERANCE_MINUTES } from "@drive-map/shared";
-
 type ValidateRouteDurationResult = {
   ok: boolean;
   diffMinutes: number;
@@ -10,12 +8,34 @@ type ValidateRouteDurationResult = {
   maxAllowedMinutes: number;
 };
 
-const RELATIVE_DURATION_TOLERANCE_RATIO = 0.2;
-const MAX_DURATION_TOLERANCE_MINUTES = 30;
+/** 60〜180 分帯: max(15, 20%) 上限 30 */
+const TOLERANCE_FLOOR_SHORT_MINUTES = 15;
+const TOLERANCE_RATIO_SHORT = 0.2;
+const TOLERANCE_CAP_SHORT_MINUTES = 30;
+
+/** 181〜360 分帯: max(30, 25%) 上限 75 */
+const TOLERANCE_FLOOR_MID_MINUTES = 30;
+const TOLERANCE_RATIO_MID = 0.25;
+const TOLERANCE_CAP_MID_MINUTES = 75;
+
+/** 361〜1800 分帯: max(45, 30%) 上限 180 */
+const TOLERANCE_FLOOR_LONG_MINUTES = 45;
+const TOLERANCE_RATIO_LONG = 0.3;
+const TOLERANCE_CAP_LONG_MINUTES = 180;
 
 export function calculateDurationToleranceMinutes(requestedDurationMinutes: number): number {
-  const relativeTolerance = Math.ceil(requestedDurationMinutes * RELATIVE_DURATION_TOLERANCE_RATIO);
-  return Math.min(MAX_DURATION_TOLERANCE_MINUTES, Math.max(DURATION_TOLERANCE_MINUTES, relativeTolerance));
+  if (requestedDurationMinutes <= 180) {
+    const relativeTolerance = Math.ceil(requestedDurationMinutes * TOLERANCE_RATIO_SHORT);
+    return Math.min(TOLERANCE_CAP_SHORT_MINUTES, Math.max(TOLERANCE_FLOOR_SHORT_MINUTES, relativeTolerance));
+  }
+
+  if (requestedDurationMinutes <= 360) {
+    const relativeTolerance = Math.ceil(requestedDurationMinutes * TOLERANCE_RATIO_MID);
+    return Math.min(TOLERANCE_CAP_MID_MINUTES, Math.max(TOLERANCE_FLOOR_MID_MINUTES, relativeTolerance));
+  }
+
+  const relativeTolerance = Math.ceil(requestedDurationMinutes * TOLERANCE_RATIO_LONG);
+  return Math.min(TOLERANCE_CAP_LONG_MINUTES, Math.max(TOLERANCE_FLOOR_LONG_MINUTES, relativeTolerance));
 }
 
 export function buildDurationWindowMinutes(requestedDurationMinutes: number): {

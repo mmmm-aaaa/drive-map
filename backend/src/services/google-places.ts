@@ -29,7 +29,7 @@ type GooglePlacesResponse = {
 };
 
 export async function searchPlacesByText(env: Env, params: SearchPlaceParams, signal?: AbortSignal): Promise<ResolvedPlace[]> {
-  const biasRadiusMeters = estimatePlaceBiasRadiusMeters(params.durationMinutes, params.tollRoadsAllowed);
+  const biasRadiusMeters = estimatePlaceBiasRadiusMeters(params.origin, params.durationMinutes, params.tollRoadsAllowed);
   const requestBody = {
     textQuery: params.query,
     maxResultCount: PLACE_RESULT_LIMIT,

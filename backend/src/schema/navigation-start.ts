@@ -9,8 +9,7 @@ export const navigationStartRequestSchema = z.object({
     lat: latSchema,
     lng: lngSchema
   }),
-  durationMinutes: z.number().int().min(MIN_DURATION_MINUTES).max(MAX_DURATION_MINUTES),
-  tollRoadsAllowed: z.boolean()
+  durationMinutes: z.number().int().min(MIN_DURATION_MINUTES).max(MAX_DURATION_MINUTES)
 });
 
 export type NavigationStartRequestInput = z.infer<typeof navigationStartRequestSchema>;
