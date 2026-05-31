@@ -1,0 +1,43 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace
+    command: npm run dev -w frontend -- --host 0.0.0.0 --port 5173
+    ports:
+      - "5173:5173"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      VITE_API_PROXY_TARGET: "http://backend:8787"
+    volumes:
+      - ./frontend:/workspace/frontend
+      - ./shared:/workspace/shared
+      - ./package.json:/workspace/package.json:ro
+      - ./tsconfig.base.json:/workspace/tsconfig.base.json:ro
+      - ./backend:/workspace/backend:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace
+    command: sh -lc "mkdir -p frontend/dist && npm run dev -w backend -- --ip 0.0.0.0 --port 8787 --var APP_ORIGIN:http://localhost:5173 --var ALLOW_UNPROTECTED_START:true"
+    ports:
+      - "8787:8787"
+    environment:
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gemini-3.1-flash-lite-preview}
+      LLM_API_URL: ${LLM_API_URL:-https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      WRANGLER_SEND_METRICS: "false"
+    volumes:
+      - ./backend:/workspace/backend
+      - ./.env:/workspace/backend/.dev.vars:ro
+      - ./shared:/workspace/shared
+      - ./frontend:/workspace/frontend
+      - ./tests:/workspace/tests
+      - ./package.json:/workspace/package.json:ro
+      - ./tsconfig.base.json:/workspace/tsconfig.base.json:ro
+      - ./vitest.config.ts:/workspace/vitest.config.ts:ro

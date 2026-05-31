@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+node_modules
+**/node_modules
+dist
+**/dist
+.wrangler
+coverage
+*.log
+.DS_Store

@@ -1,0 +1,34 @@
+{
+  "name": "drive-map",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-27",
+  "assets": {
+    "directory": "../frontend/dist"
+  },
+  "vars": {
+    "LLM_MODEL": "gemini-3.1-flash-lite-preview",
+    "LLM_API_URL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    "APP_ORIGIN": ""
+  },
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "staging": {
+      "name": "drive-map-staging",
+      "vars": {
+        "LLM_MODEL": "gemini-3.1-flash-lite-preview",
+        "LLM_API_URL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "APP_ORIGIN": ""
+      }
+    },
+    "production": {
+      "name": "drive-map-production",
+      "vars": {
+        "LLM_MODEL": "gemini-3.1-flash-lite-preview",
+        "LLM_API_URL": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "APP_ORIGIN": ""
+      }
+    }
+  }
+}
